@@ -12,7 +12,11 @@ function ImportContent() {
   const bankId = searchParams.get('bank');
   const ref = searchParams.get('ref');
 
-  const [status, setStatus] = useState<'checking' | 'importing' | 'done' | 'error' | 'no_auth'>('checking');
+  const [status, setStatus] = useState<
+  'checking' | 'importing' | 'done' | 'error' | 'no_auth'
+>('checking');
+
+  const [progressStep, setProgressStep] = useState(0);
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
   const [bank, setBank] = useState<any>(null);
@@ -105,30 +109,52 @@ function ImportContent() {
           )}
         </div>
 
-        <div className="space-y-2 text-left">
-          {[
-            { label: 'Verifying PastQ purchase', done: status === 'importing' || status === 'done' },
-            { label: 'Importing questions', done: status === 'done' },
-            { label: 'Analysing topic frequency', done: status === 'done' },
-            { label: 'Generating structured course', done: status === 'done' },
-          ].map((step, i) => (
-            <div key={i} className="flex items-center gap-3">
-              {step.done
-                ? <CheckCircle2 size={16} className="text-emerald-600 shrink-0" />
-                : <Loader2 size={16} className="text-indigo-400 animate-spin shrink-0" />}
-              <span className={`text-sm ${step.done ? 'text-gray-800' : 'text-gray-400'}`}>{step.label}</span>
-            </div>
-          ))}
-        </div>
+<div className="space-y-2 text-left">
+  {[
+    {
+      label: 'Verifying PastQ purchase',
+      done: status === 'importing',
+    },
+    {
+      label: 'Importing questions',
+      done: false,
+    },
+    {
+      label: 'Analysing topic frequency',
+      done: false,
+    },
+    {
+      label: 'Generating structured course',
+      done: false,
+    },
+  ].map((step, i) => (
+    <div key={i} className="flex items-center gap-3">
+      {step.done ? (
+        <CheckCircle2
+          size={16}
+          className="text-emerald-600 shrink-0"
+        />
+      ) : (
+        <Loader2
+          size={16}
+          className="text-indigo-400 animate-spin shrink-0"
+        />
+      )}
 
-        <p className="text-xs text-gray-400">
-          This may take 30–60 seconds while AI builds your course
-        </p>
-      </div>
+      <span
+        className={`text-sm ${
+          step.done
+            ? 'text-gray-800'
+            : 'text-gray-400'
+        }`}
+      >
+        {step.label}
+      </span>
     </div>
-  );
+  ))}
+</div>
 
-  if (status === 'error') return (
+ if (status === 'error') return (
     <div className="min-h-screen bg-[#F8F8F8] flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-3xl p-8 text-center space-y-4">
         <AlertCircle size={32} className="mx-auto text-rose-500" />
