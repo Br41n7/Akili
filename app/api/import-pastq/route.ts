@@ -79,9 +79,19 @@ export async function POST(req: NextRequest) {
     });
 
     // Run AI topic frequency analysis
-    const profile = await supabaseAdmin.from('profiles').select('region').eq('id', user.id).single();
-    const region = profile.data?.region || 'Nigeria';
-    const regionContext = profile.data?.region_context || {};
+    const profile = await supabaseAdmin
+  .from('profiles')
+  .select('region, region_context')
+  .eq('id', user.id)
+  .single();
+
+    const profileData = profile.data as {
+  region?: string | null;
+  region_context?: Record<string, unknown> | null;
+} | null;
+
+    const region = profileData?.region ?? null;
+const regionContext = profileData?.region_context ?? {};
 
     const topicPrompt = `Analyze these ${bank.exam_type} ${bank.subject} past questions and identify:
 1. Topic frequency (how many times each topic appears)
