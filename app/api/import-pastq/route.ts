@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     });
 
     // Run AI topic frequency analysis
-    const profile = await supabaseAdmin
+const profile = await supabaseAdmin
   .from('profiles')
   .select('region, region_context')
   .eq('id', user.id)
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
   region_context?: Record<string, unknown> | null;
 } | null;
 
-    const region = profileData?.region ?? null;
+    const region = profileData?.region ?? '';
 const regionContext = profileData?.region_context ?? {};
 
     const topicPrompt = `Analyze these ${bank.exam_type} ${bank.subject} past questions and identify:
