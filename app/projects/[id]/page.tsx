@@ -6,7 +6,7 @@ import { supabase } from '@/lib/supabase';
 import {
   ArrowLeft, BookOpen, GraduationCap, HelpCircle,
   ShieldAlert, Sparkles, MessageSquare, Eye,
-  BarChart3, Loader2, FileText, Zap
+  BarChart3, Loader2, FileText, Zap, Brain
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import CourseView from '@/components/CourseView';
@@ -16,13 +16,15 @@ import Flashcards from '@/components/Flashcards';
 import AskAI from '@/components/AskAI';
 import TopicAnalysis from '@/components/TopicAnalysis';
 import Materials from '@/components/Materials';
+import LearningProgress from '@/components/LearningProgress';
 
-type Tab = 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'ask' | 'analysis';
+type Tab = 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'ask' | 'analysis' | 'progress';
 
 const TABS: { id: Tab; label: string; icon: any; desc: string }[] = [
   { id: 'materials', label: 'Materials', icon: FileText, desc: 'Documents & notes' },
   { id: 'course', label: 'Course', icon: GraduationCap, desc: 'AI-built lessons' },
   { id: 'analysis', label: 'Topic Analysis', icon: BarChart3, desc: 'Exam patterns' },
+  { id: 'progress', label: 'Learning Profile', icon: Brain, desc: 'Your adaptive progress' },
   { id: 'quiz', label: 'Quiz', icon: HelpCircle, desc: 'Practice questions' },
   { id: 'exam', label: 'Exam Mode', icon: ShieldAlert, desc: 'Timed simulation' },
   { id: 'flashcards', label: 'Flashcards', icon: Sparkles, desc: 'Memory aids' },
@@ -129,6 +131,7 @@ export default function ProjectPage() {
         {activeTab === 'materials' && <Materials projectId={projectId} userId={user?.id} />}
         {activeTab === 'course' && <CourseView projectId={projectId} userId={user?.id} region={region} persona={persona} userGroqKey={userGroqKey} />}
         {activeTab === 'analysis' && <TopicAnalysis projectId={projectId} examType={project?.exam_type} />}
+        {activeTab === 'progress' && <LearningProgress projectId={projectId} userId={user?.id} />}
         {activeTab === 'quiz' && <QuizMode projectId={projectId} userId={user?.id} region={region} persona={persona} />}
         {activeTab === 'exam' && <ExamMode projectId={projectId} userId={user?.id} region={region} persona={persona} />}
         {activeTab === 'flashcards' && <Flashcards projectId={projectId} userId={user?.id} region={region} />}

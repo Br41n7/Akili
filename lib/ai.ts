@@ -5,7 +5,7 @@ import Groq from 'groq-sdk';
 const GROQ_TASKS = ['course_builder', 'study_guide', 'slide_deck', 'mnemonic', 'shortcut'];
 
 // Tasks routed to Gemini (vision, reasoning, analysis)
-const GEMINI_TASKS = ['living_concept', 'snap_solve', 'quiz', 'exam', 'concept_battle', 'research_validator', 'storyboard', 'notebook', 'confusion', 'topic_analysis'];
+const GEMINI_TASKS = ['living_concept', 'snap_solve', 'quiz', 'exam', 'concept_battle', 'research_validator', 'storyboard', 'notebook', 'confusion', 'topic_analysis', 'adaptive_quiz', 'adaptive_analysis', 'adaptive_tutor'];
 
 export interface AIOptions {
   task: string;

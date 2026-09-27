@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { callAI, safeJsonParse, cn } from '@/lib/utils';
+import { compactLearnerContext, getLearnerContext, recordEvidence } from '@/lib/adaptive';
 import { ShieldAlert, Loader2, Clock, CheckCircle2, XCircle, BarChart3 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -31,14 +32,21 @@ export default function ExamMode({ projectId, userId, region, persona }: Props) 
   const generate = async () => {
     setGenerating(true);
     try {
-      const { data: docs } = await supabase.from('documents').select('content').eq('project_id', projectId).eq('user_id', userId).limit(4);
+      const [{ data: docs }, learner] = await Promise.all([
+        supabase.from('documents').select('content').eq('project_id', projectId).eq('user_id', userId).limit(4),
+        getLearnerContext(projectId, userId),
+      ]);
       const context = docs?.map(d => d.content).join('\n\n').slice(0, 7000) || '';
       if (!context) { toast.error('Add study materials first'); setGenerating(false); return; }
+      const adaptive = compactLearnerContext(learner);
 
-      const prompt = `Create a 10-question exam mixing: multiple_choice, true_false, concept_trap (tricky question testing deep understanding).
+      const prompt = `Create a 10-question adaptive exam mixing: multiple_choice, true_false, concept_trap (tricky question testing deep understanding).
 Context: ${context}
 
-Return JSON: { "title": string, "questions": [{ "id": string, "type": "multiple_choice"|"true_false"|"concept_trap", "question": string, "options": ["A) ...", "B) ...","C) ...","D) ..."], "correct_answer": string, "explanation": string, "concept": string }] }`;
+Learner context (evidence, not absolute truth): ${JSON.stringify(adaptive)}
+Prioritize concepts that need practice while still sampling strong areas. Include concept and cognitive_level on every question.
+
+Return JSON: { "title": string, "questions": [{ "id": string, "type": "multiple_choice"|"true_false"|"concept_trap", "question": string, "options": ["A) ...", "B) ...","C) ...","D) ..."], "correct_answer": string, "explanation": string, "concept": string, "cognitive_level": string }] }`;
 
       const raw = await callAI({ task: 'exam', prompt, region, persona, format: 'json' });
       const data = safeJsonParse(raw);
@@ -70,6 +78,23 @@ Return JSON: { "score": ${score}, "total": ${exam.questions.length}, "weak_conce
         questions: exam.questions, answers, score, total: exam.questions.length,
         analysis: analysisData, time_taken_seconds: DURATION - timeLeft,
       });
+
+      // Feed per-question evidence into the adaptive learner model.
+      for (const q of exam.questions) {
+        const correct = answers[q.id] === q.correct_answer;
+        await recordEvidence({
+          userId,
+          projectId,
+          concept: q.concept || 'General',
+          sourceType: 'exam',
+          interactionType: q.cognitive_level || q.type || 'assessment',
+          prompt: q.question,
+          learnerResponse: answers[q.id] || '',
+          correctness: correct,
+          difficulty: q.type === 'concept_trap' ? 'advanced' : 'intermediate',
+          evidence: correct ? 'Answered correctly in a timed assessment.' : 'Answered incorrectly in a timed assessment.',
+        });
+      }
 
       setAnalysis({ ...analysisData, score, total: exam.questions.length });
     } catch (err: any) { toast.error('Analysis failed'); }

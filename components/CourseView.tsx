@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { callAI, safeJsonParse, cn } from '@/lib/utils';
+import { recordEvidence } from '@/lib/adaptive';
 import { GraduationCap, ChevronDown, ChevronRight, CheckCircle2, Circle, BookOpen, Play, Loader2, Sparkles, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ReactMarkdown from 'react-markdown';
@@ -23,10 +24,12 @@ export default function CourseView({ projectId, userId, region, persona, userGro
 
   useEffect(() => {
     async function load() {
-      const [{ data: courseData }, { data: progressData }] = await Promise.all([
-        supabase.from('courses').select('*').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(1).single(),
-        supabase.from('course_progress').select('*').eq('project_id', projectId).eq('user_id', userId).single(),
-      ]);
+      const { data: courseData } = await supabase.from('courses').select('*').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(1).single();
+      let progressData: any = null;
+      if (courseData) {
+        const { data } = await supabase.from('course_progress').select('*').eq('course_id', courseData.id).eq('user_id', userId).single();
+        progressData = data;
+      }
       if (courseData) { setCourse(courseData); setExpandedModule(courseData.modules?.[0]?.id); }
       if (progressData) setProgress(progressData);
       setLoading(false);
@@ -77,7 +80,7 @@ Return JSON:
       "worked_example": { "problem": string, "solution_steps": [string], "answer": string },
       "common_mistakes": [string],
       "practice_questions": [{
-        "id": string, "question": string,
+        "id": string, "question": string, "concept": string,
         "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
         "correct_answer": "A",
         "explanation": string
@@ -307,7 +310,23 @@ Return JSON:
                 ))}
 
                 {!quizSubmitted ? (
-                  <button onClick={() => setQuizSubmitted(true)} disabled={Object.keys(quizAnswer).length === 0}
+                  <button onClick={async () => {
+                    setQuizSubmitted(true);
+                    for (const q of activeLesson.practice_questions) {
+                      const correct = quizAnswer[q.id] === q.correct_answer;
+                      await recordEvidence({
+                        userId, projectId,
+                        concept: q.concept || activeLesson.key_concepts?.[0] || activeLesson.title,
+                        sourceType: 'lesson',
+                        interactionType: 'lesson_practice',
+                        prompt: q.question,
+                        learnerResponse: quizAnswer[q.id] || '',
+                        correctness: correct,
+                        difficulty: 'developing',
+                        evidence: q.explanation || 'Lesson practice result',
+                      });
+                    }
+                  }} disabled={Object.keys(quizAnswer).length < activeLesson.practice_questions.length}
                     className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl text-sm font-bold">
                     Check Answers
                   </button>
