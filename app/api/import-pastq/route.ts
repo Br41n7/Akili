@@ -4,6 +4,17 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { runAIWithRetry, stripFences } from '@/lib/ai';
 import { buildCulturalBlock } from '@/lib/cultural';
 
+/** Map a PastQ exam type onto the exam boards Akili knows about. */
+function pastqBoard(examType?: string | null): string {
+  switch ((examType || '').toUpperCase()) {
+    case 'WAEC': case 'WASSCE': return 'WAEC';
+    case 'NECO': return 'NECO';
+    case 'JAMB': case 'UTME': case 'POST-UTME': return 'JAMB';
+    case 'KCSE': return 'KCSE';
+    default: return 'SCHOOL';
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const supabase = await createSupabaseServerClient();
@@ -55,6 +66,10 @@ export async function POST(req: NextRequest) {
         description: `Imported from PastQ — ${bank.exam_type} ${bank.subject} (${bank.year_start || ''}–${bank.year_end || ''})`,
         subject: bank.subject,
         exam_type: bank.exam_type,
+        // PastQ banks are exam past questions, so they are secondary / exam-board projects.
+        education_level: 'secondary',
+        exam_board: pastqBoard(bank.exam_type),
+        study_goal: 'exam_prep',
         source: 'pastq',
         source_bank_id: bank_id,
       })

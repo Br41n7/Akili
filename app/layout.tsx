@@ -1,20 +1,34 @@
-import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
+import type { Metadata, Viewport } from 'next';
+import { Bricolage_Grotesque, Source_Serif_4 } from 'next/font/google';
 import './globals.css';
 import { Toaster } from 'react-hot-toast';
 
-const inter = Inter({ subsets: ['latin'] });
+// Bricolage Grotesque carries the interface; Source Serif 4 carries anything you read for a long time.
+// The latin-ext subset covers Yoruba, Igbo and Hausa letters.
+const ui = Bricolage_Grotesque({ subsets: ['latin', 'latin-ext'], variable: '--font-ui', display: 'swap' });
+const read = Source_Serif_4({ subsets: ['latin', 'latin-ext'], variable: '--font-read', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: 'Akili — AI Study Copilot for African Students',
-  description: 'Upload your notes, import PastQ question banks, and let AI build a course, quiz, and exam system tailored to your environment.',
+  title: 'Akili — AI study copilot for African students',
+  description: 'Upload your notes or import past questions. Akili builds lessons, quizzes and mock exams for your level.',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  themeColor: '#16204A',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className={`${inter.className} bg-[#F8F8F8] text-[#111]`}>
-        <Toaster position="top-right" />
+    <html lang="en" className={`${ui.variable} ${read.variable}`}>
+      <body>
+        <Toaster
+          position="top-center"
+          containerStyle={{ top: 'calc(env(safe-area-inset-top) + 8px)' }}
+          toastOptions={{ style: { background: '#16204A', color: '#fff', fontSize: '14px', borderRadius: '12px' }, duration: 3500 }}
+        />
         {children}
       </body>
     </html>

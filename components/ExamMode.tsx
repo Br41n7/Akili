@@ -1,499 +1,268 @@
 'use client';
-
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { callAI, safeJsonParse, cn } from '@/lib/utils';
+import { callAIJSON, cn, errorMessage } from '@/lib/utils';
+import { compactLearnerContext, getLearnerContext, recordEvidence } from '@/lib/adaptive';
+import { Clock, Flag, RotateCcw, ShieldAlert, X } from 'lucide-react';
 import {
-  compactLearnerContext,
-  getLearnerContext,
-  recordEvidence,
-} from '@/lib/adaptive';
-import {
-  ShieldAlert,
-  Loader2,
-  Clock,
-} from 'lucide-react';
-import toast from 'react-hot-toast';
+  Button, ConfirmDialog, EmptyState, ErrorState, GeneratingPanel, OptionRow, Surface, splitOption, type OptionState,
+} from '@/components/ui';
 
-interface Props {
-  projectId: string;
-  userId: string;
-  region: string;
-  persona: string;
-}
+interface Props { projectId: string; userId: string; region: string; persona: string; onGoToMaterials?: () => void }
 
-const DURATION = 45 * 60; // 45 minutes in seconds
+const DURATION = 45 * 60;
+const STEPS = ['Reading your materials', 'Choosing questions to test what you know', 'Writing the exam', 'Finalizing'];
 
-export default function ExamMode({
-  projectId,
-  userId,
-  region,
-  persona,
-}: Props) {
+const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+
+export default function ExamMode({ projectId, userId, region, persona, onGoToMaterials }: Props) {
+  const [phase, setPhase] = useState<'intro' | 'generating' | 'exam' | 'submitting' | 'results'>('intro');
   const [exam, setExam] = useState<any>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [flagged, setFlagged] = useState<Set<string>>(new Set());
+  const [index, setIndex] = useState(0);
   const [analysis, setAnalysis] = useState<any>(null);
-  const [generating, setGenerating] = useState(false);
-  const [analyzing, setAnalyzing] = useState(false);
   const [timeLeft, setTimeLeft] = useState(DURATION);
-  const [started, setStarted] = useState(false);
-
-  // Fixed: useRef requires an initial value with the current React typings.
+  const [error, setError] = useState('');
+  const [confirmSubmit, setConfirmSubmit] = useState(false);
+  const [showNav, setShowNav] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
-    if (!started) return;
-
-    if (timeLeft <= 0) {
-      if (timerRef.current !== null) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-
-      handleSubmit();
-      return;
-    }
-
-    timerRef.current = setInterval(() => {
-      setTimeLeft((t) => Math.max(0, t - 1));
-    }, 1000);
-
-    return () => {
-      if (timerRef.current !== null) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-    };
-  }, [started, timeLeft]);
+    if (phase !== 'exam') return;
+    if (timeLeft <= 0) { submit(); return; }
+    timerRef.current = setInterval(() => setTimeLeft(t => Math.max(0, t - 1)), 1000);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [phase, timeLeft]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const generate = async () => {
-    setGenerating(true);
-
+    setPhase('generating'); setError('');
     try {
       const [{ data: docs }, learner] = await Promise.all([
-        supabase
-          .from('documents')
-          .select('content')
-          .eq('project_id', projectId)
-          .eq('user_id', userId)
-          .limit(4),
-
+        supabase.from('documents').select('content').eq('project_id', projectId).eq('user_id', userId).limit(4),
         getLearnerContext(projectId, userId),
       ]);
-
-      const context =
-        docs?.map((d) => d.content).join('\n\n').slice(0, 7000) || '';
-
-      if (!context) {
-        toast.error('Add study materials first');
-        setGenerating(false);
-        return;
-      }
+      const context = (docs || []).map(d => d.content).join('\n\n').slice(0, 7000);
+      if (!context.trim()) { setError('MATERIALS'); setPhase('intro'); return; }
 
       const adaptive = compactLearnerContext(learner);
-
-      const prompt = `Create a 10-question adaptive exam mixing: multiple_choice, true_false, concept_trap (tricky question testing deep understanding).
+      const prompt = `Create a 10-question timed exam mixing multiple_choice, true_false and concept_trap (a tricky question that catches surface-level memorization).
 
 Context:
 ${context}
 
-Learner context (evidence, not absolute truth):
-${JSON.stringify(adaptive)}
-
+Learner context (evidence, not absolute truth): ${JSON.stringify(adaptive)}
 Prioritize concepts that need practice while still sampling strong areas. Include concept and cognitive_level on every question.
 
 Return JSON:
-{
-  "title": string,
-  "questions": [
-    {
-      "id": string,
-      "type": "multiple_choice"|"true_false"|"concept_trap",
-      "question": string,
-      "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
-      "correct_answer": string,
-      "explanation": string,
-      "concept": string,
-      "cognitive_level": string
-    }
-  ]
-}`;
+{"title": string, "questions": [{"id": string, "type": "multiple_choice"|"true_false"|"concept_trap", "question": string, "options": ["A) ...","B) ...","C) ...","D) ..."], "correct_answer": string, "explanation": string, "concept": string, "cognitive_level": string}]}`;
 
-      const raw = await callAI({
-        task: 'exam',
-        prompt,
-        region,
-        persona,
-        format: 'json',
-      });
-
-      const data = safeJsonParse(raw);
-
-      if (!data?.questions?.length) {
-        throw new Error('Exam generation failed');
-      }
-
-      setExam(data);
-      setAnswers({});
-      setAnalysis(null);
-      setTimeLeft(DURATION);
-      setStarted(false);
-    } catch (err: any) {
-      toast.error(err?.message || 'Failed to generate exam');
-    } finally {
-      setGenerating(false);
+      const data = await callAIJSON<any>({ task: 'exam', prompt, region, persona, projectId, validationType: 'exam' });
+      setExam(data); setAnswers({}); setFlagged(new Set()); setIndex(0); setAnalysis(null); setTimeLeft(DURATION);
+      setPhase('exam');
+    } catch (err) {
+      setError(errorMessage(err, 'We could not build the exam. Please try again.'));
+      setPhase('intro');
     }
   };
 
-  const handleSubmit = async () => {
-    if (!exam || analyzing) return;
+  const submit = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setConfirmSubmit(false);
+    if (timerRef.current) clearInterval(timerRef.current);
+    setPhase('submitting');
 
-    if (timerRef.current !== null) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
-
-    setStarted(false);
-    setAnalyzing(true);
-
-    const score = exam.questions.filter(
-      (q: any) => answers[q.id] === q.correct_answer
-    ).length;
-
+    const score = exam.questions.filter((q: any) => answers[q.id] === q.correct_answer).length;
+    let analysisData: any = null;
     try {
       const prompt = `Analyze these exam results and identify weak concepts.
-
-Exam:
-${JSON.stringify(
-  exam.questions.map((q: any) => ({
-    id: q.id,
-    concept: q.concept,
-    correct: q.correct_answer,
-  }))
-)}
-
-Answers:
-${JSON.stringify(answers)}
-
-Return JSON:
-{
-  "score": ${score},
-  "total": ${exam.questions.length},
-  "weak_concepts": [string],
-  "strong_concepts": [string],
-  "recommendations": [string],
-  "overall_verdict": string
-}`;
-
-      const raw = await callAI({
-        task: 'exam',
-        prompt,
-        region,
-        persona,
-        format: 'json',
-      });
-
-      const analysisData = safeJsonParse(raw);
+Exam: ${JSON.stringify(exam.questions.map((q: any) => ({ id: q.id, concept: q.concept, correct: q.correct_answer })))}
+Answers: ${JSON.stringify(answers)}
+Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_concepts": [string], "recommendations": [string]}`;
+      analysisData = await callAIJSON<any>({ task: 'exam', prompt, region, persona, projectId, validationType: 'exam_analysis' }).catch(() => null);
 
       await supabase.from('exam_attempts').insert({
-        project_id: projectId,
-        user_id: userId,
-        type: 'exam',
-        questions: exam.questions,
-        answers,
-        score,
-        total: exam.questions.length,
-        analysis: analysisData,
-        time_taken_seconds: DURATION - timeLeft,
+        project_id: projectId, user_id: userId, type: 'exam',
+        questions: exam.questions, answers, score, total: exam.questions.length,
+        analysis: analysisData, time_taken_seconds: DURATION - timeLeft,
       });
 
-      // Feed per-question evidence into the adaptive learner model.
       for (const q of exam.questions) {
         const correct = answers[q.id] === q.correct_answer;
-
         await recordEvidence({
-          userId,
-          projectId,
-          concept: q.concept || 'General',
-          sourceType: 'exam',
-          interactionType:
-            q.cognitive_level || q.type || 'assessment',
-          prompt: q.question,
-          learnerResponse: answers[q.id] || '',
-          correctness: correct,
-          difficulty:
-            q.type === 'concept_trap' ? 'advanced' : 'intermediate',
-          evidence: correct
-            ? 'Answered correctly in a timed assessment.'
-            : 'Answered incorrectly in a timed assessment.',
+          userId, projectId, concept: q.concept || 'General', sourceType: 'exam',
+          interactionType: q.cognitive_level || q.type || 'assessment',
+          prompt: q.question, learnerResponse: answers[q.id] || '', correctness: correct,
+          difficulty: q.type === 'concept_trap' ? 'advanced' : 'intermediate',
+          evidence: correct ? 'Answered correctly in a timed assessment.' : 'Answered incorrectly in a timed assessment.',
         });
       }
-
-      setAnalysis({
-        ...analysisData,
-        score,
-        total: exam.questions.length,
-      });
-    } catch (err: any) {
-      console.error('[ExamMode] Submission failed:', err);
-      toast.error('Analysis failed');
-    } finally {
-      setAnalyzing(false);
+    } catch {
+      /* the learner still gets their score even if analysis or saving partly fails */
     }
+    setAnalysis({ ...(analysisData || {}), score, total: exam.questions.length });
+    submittingRef.current = false;
+    setPhase('results');
   };
 
-  const fmt = (s: number) =>
-    `${Math.floor(s / 60)
-      .toString()
-      .padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+  const retake = () => { setExam(null); setAnswers({}); setFlagged(new Set()); setIndex(0); setAnalysis(null); setTimeLeft(DURATION); setPhase('intro'); };
 
-  if (analysis) {
+  const toggleFlag = (id: string) => setFlagged(f => { const n = new Set(f); n.has(id) ? n.delete(id) : n.add(id); return n; });
+
+  // ── Intro ─────────────────────────────────────────────────────────────────
+
+  if (phase === 'intro') {
     return (
-      <div className="p-4 max-w-2xl mx-auto space-y-4">
-        <div
-          className={cn(
-            'rounded-3xl p-6 text-white text-center',
-            analysis.score / analysis.total >= 0.7
-              ? 'bg-gradient-to-br from-indigo-500 to-violet-600'
-              : 'bg-gradient-to-br from-rose-500 to-orange-500'
-          )}
-        >
-          <p className="text-5xl font-black">
-            {analysis.score}
-            <span className="text-2xl opacity-70">
-              /{analysis.total}
-            </span>
-          </p>
+      <div className="p-4">
+        {error === 'MATERIALS' ? (
+          <>
+            <EmptyState icon={<ShieldAlert size={22} />} title="Add materials first">
+              Exam mode builds questions from your notes and documents. Add some in the Materials tab, then come back.
+            </EmptyState>
+            {onGoToMaterials && <Button block className="mt-4" variant="quiet" onClick={onGoToMaterials}>Go to Materials</Button>}
+          </>
+        ) : (
+          <>
+            <EmptyState
+              icon={<ShieldAlert size={22} />}
+              title="Exam Mode"
+              action={<Button onClick={generate}>Start exam</Button>}
+            >
+              A timed, 10-question mock exam with mixed question types, including a few tricky ones that catch surface-level memorizing.
+            </EmptyState>
+            {error && <div className="mt-4"><ErrorState message={error} onRetry={generate} /></div>}
+          </>
+        )}
+      </div>
+    );
+  }
 
-          <p className="mt-1 font-semibold">
-            {Math.round((analysis.score / analysis.total) * 100)}%
-          </p>
+  if (phase === 'generating') return <div className="p-4"><GeneratingPanel title="Building your exam" steps={STEPS} /></div>;
+  if (phase === 'submitting') return <div className="p-4"><GeneratingPanel title="Marking your exam" steps={['Checking your answers', 'Finding weak and strong areas', 'Saving your result']} /></div>;
 
-          <p className="text-sm opacity-80 mt-2">
-            {analysis.overall_verdict}
-          </p>
-        </div>
+  // ── Results ───────────────────────────────────────────────────────────────
+
+  if (phase === 'results') {
+    const pct = Math.round((analysis.score / analysis.total) * 100);
+    const pass = pct >= 70;
+    return (
+      <div className="space-y-4 p-4">
+        <Surface className={cn('p-6 text-center text-white', pass ? 'bg-tick' : 'bg-redpen')}>
+          <p className="text-6xl font-extrabold tracking-tight">{analysis.score}<span className="text-3xl opacity-70">/{analysis.total}</span></p>
+          <p className="mt-1 text-lg font-bold">{pct}%</p>
+          {analysis.overall_verdict && <p className="mt-2 text-sm opacity-90">{analysis.overall_verdict}</p>}
+        </Surface>
 
         {analysis.weak_concepts?.length > 0 && (
-          <div className="bg-rose-50 rounded-3xl p-5">
-            <p className="font-bold text-sm text-rose-700 mb-2">
-              ⚠️ Weak Areas — Study These
-            </p>
-
-            {analysis.weak_concepts.map(
-              (c: string, i: number) => (
-                <p key={i} className="text-sm text-rose-600">
-                  • {c}
-                </p>
-              )
-            )}
-          </div>
+          <Surface className="border-redpen/30 p-4">
+            <p className="mb-1.5 text-sm font-bold text-redpen">Study these next</p>
+            {analysis.weak_concepts.map((c: string, i: number) => <p key={i} className="text-sm leading-relaxed">{c}</p>)}
+          </Surface>
         )}
-
         {analysis.strong_concepts?.length > 0 && (
-          <div className="bg-emerald-50 rounded-3xl p-5">
-            <p className="font-bold text-sm text-emerald-700 mb-2">
-              ✅ Strong Areas
-            </p>
-
-            {analysis.strong_concepts.map(
-              (c: string, i: number) => (
-                <p key={i} className="text-sm text-emerald-600">
-                  • {c}
-                </p>
-              )
-            )}
-          </div>
+          <Surface className="border-tick/30 p-4">
+            <p className="mb-1.5 text-sm font-bold text-tick">You have these down</p>
+            {analysis.strong_concepts.map((c: string, i: number) => <p key={i} className="text-sm leading-relaxed">{c}</p>)}
+          </Surface>
         )}
-
         {analysis.recommendations?.length > 0 && (
-          <div className="bg-white rounded-3xl p-5">
-            <p className="font-bold text-sm mb-2">
-              📋 Recommendations
-            </p>
-
-            {analysis.recommendations.map(
-              (r: string, i: number) => (
-                <p
-                  key={i}
-                  className="text-sm text-gray-600 mb-1"
-                >
-                  • {r}
-                </p>
-              )
-            )}
-          </div>
+          <Surface className="p-4">
+            <p className="mb-1.5 text-sm font-bold">Recommendations</p>
+            {analysis.recommendations.map((r: string, i: number) => <p key={i} className="text-sm leading-relaxed text-muted">{r}</p>)}
+          </Surface>
         )}
 
-        <button
-          onClick={() => {
-            setExam(null);
-            setAnswers({});
-            setAnalysis(null);
-            setTimeLeft(DURATION);
-            setStarted(false);
-          }}
-          className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-bold text-sm"
-        >
-          Retake Exam
-        </button>
+        <Button block onClick={retake}><RotateCcw size={16} /> Retake exam</Button>
       </div>
     );
   }
 
-  if (!exam) {
-    return (
-      <div className="p-4 max-w-2xl mx-auto">
-        <div className="bg-white rounded-3xl p-8 text-center space-y-4">
-          <div className="w-14 h-14 bg-amber-100 rounded-3xl flex items-center justify-center mx-auto">
-            <ShieldAlert
-              size={26}
-              className="text-amber-600"
-            />
-          </div>
+  // ── Exam ──────────────────────────────────────────────────────────────────
 
-          <h2 className="text-xl font-black">
-            Exam Mode
-          </h2>
-
-          <p className="text-sm text-gray-500">
-            A timed 45-minute exam simulation with mixed
-            question types including concept traps designed
-            to catch surface-level memorization.
-          </p>
-
-          <button
-            onClick={generate}
-            disabled={generating}
-            className="flex items-center gap-2 mx-auto bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white px-8 py-3.5 rounded-2xl font-bold text-sm"
-          >
-            {generating ? (
-              <>
-                <Loader2
-                  size={16}
-                  className="animate-spin"
-                />
-                Building exam...
-              </>
-            ) : (
-              '🚀 Start Exam'
-            )}
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const q = exam.questions[index];
+  const options = q.type === 'true_false' ? ['A) True', 'B) False'] : q.options || [];
+  const answeredCount = Object.keys(answers).length;
 
   return (
-    <div className="p-4 max-w-2xl mx-auto space-y-4">
-      {/* Timer bar */}
-      <div className="bg-white rounded-2xl p-4 flex items-center justify-between sticky top-0 z-10 border border-black/5">
-        <div className="flex items-center gap-2">
-          <Clock
-            size={16}
-            className={cn(
-              timeLeft < 300
-                ? 'text-rose-500 animate-pulse'
-                : 'text-gray-400'
-            )}
-          />
+    <div className="space-y-4 p-4 pb-24">
+      <div className="sticky top-14 z-30 -mx-4 flex items-center gap-3 border-b border-rule bg-chalk/95 px-4 py-2.5 backdrop-blur md:top-[6.5rem]">
+        <span className={cn('flex items-center gap-1.5 font-mono text-base font-bold tabular-nums', timeLeft < 300 && 'text-redpen')}>
+          <Clock size={16} className={timeLeft < 300 ? 'animate-pulse' : ''} /> {fmt(timeLeft)}
+        </span>
+        <button onClick={() => setShowNav(true)} className="flex-1 text-center text-sm font-semibold text-muted underline-offset-2 hover:underline">
+          {answeredCount}/{exam.questions.length} answered
+        </button>
+        <Button size="sm" variant="dark" onClick={() => setConfirmSubmit(true)}>Submit</Button>
+      </div>
 
-          <span
-            className={cn(
-              'font-black text-lg',
-              timeLeft < 300 ? 'text-rose-500' : ''
-            )}
-          >
-            {fmt(timeLeft)}
-          </span>
-        </div>
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold uppercase tracking-wide text-muted">Question {index + 1} of {exam.questions.length}</span>
+        <button onClick={() => toggleFlag(q.id)} aria-pressed={flagged.has(q.id)} className={cn('flex min-h-9 items-center gap-1.5 rounded-lg px-2.5 text-xs font-semibold', flagged.has(q.id) ? 'bg-marker text-ink' : 'text-muted')}>
+          <Flag size={14} /> {flagged.has(q.id) ? 'Flagged' : 'Flag for review'}
+        </button>
+      </div>
 
-        <div className="text-sm text-gray-400">
-          {Object.keys(answers).length}/
-          {exam.questions.length} answered
-        </div>
+      <p className="font-read text-[1.25rem] font-semibold leading-snug">{q.question}</p>
 
-        {!started ? (
-          <button
-            onClick={() => {
-              setTimeLeft((current) =>
-                current > 0 ? current : DURATION
-              );
-              setStarted(true);
-            }}
-            className="bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-xl text-sm font-bold"
-          >
-            Start Timer
-          </button>
+      <div role="radiogroup" aria-label="Answer options" className="space-y-2">
+        {options.map((opt: string) => {
+          const { letter, text } = splitOption(opt);
+          const picked = answers[q.id] === letter;
+          const state: OptionState = picked ? 'selected' : 'idle';
+          return <OptionRow key={letter} letter={letter} text={text} state={state} onClick={() => setAnswers(a => ({ ...a, [q.id]: letter }))} />;
+        })}
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 pt-2">
+        <Button variant="quiet" disabled={index === 0} onClick={() => setIndex(i => i - 1)}>Previous</Button>
+        {index === exam.questions.length - 1 ? (
+          <Button variant="dark" onClick={() => setConfirmSubmit(true)}>Review & submit</Button>
         ) : (
-          <button
-            onClick={handleSubmit}
-            disabled={analyzing}
-            className="bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-bold disabled:opacity-50"
-          >
-            {analyzing ? (
-              <Loader2
-                size={14}
-                className="animate-spin"
-              />
-            ) : (
-              'Submit'
-            )}
-          </button>
+          <Button variant="dark" onClick={() => setIndex(i => i + 1)}>Next</Button>
         )}
       </div>
 
-      {exam.questions.map((q: any, i: number) => (
-        <div
-          key={q.id}
-          className="bg-white rounded-3xl p-5 space-y-3"
-        >
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-              {q.type?.replace('_', ' ')}
-            </span>
-
-            {q.concept && (
-              <span className="text-[10px] text-indigo-500">
-                {q.concept}
-              </span>
-            )}
-          </div>
-
-          <p className="font-semibold text-sm">
-            {i + 1}. {q.question}
-          </p>
-
-          <div className="space-y-2">
-            {(q.type === 'true_false'
-              ? ['A) True', 'B) False']
-              : q.options || []
-            ).map((opt: string) => {
-              const letter = opt[0];
-
-              return (
-                <button
-                  key={opt}
-                  onClick={() =>
-                    setAnswers((p) => ({
-                      ...p,
-                      [q.id]: letter,
-                    }))
-                  }
-                  className={cn(
-                    'w-full text-left px-4 py-2.5 rounded-xl border text-sm transition-all',
-                    answers[q.id] === letter
-                      ? 'border-amber-500 bg-amber-50'
-                      : 'border-gray-200 hover:border-amber-300'
-                  )}
-                >
-                  {opt}
-                </button>
-              );
-            })}
+      {showNav && (
+        <div className="fixed inset-0 z-[70] flex items-end bg-ink/50 animate-fade" onClick={() => setShowNav(false)}>
+          <div role="dialog" aria-modal="true" aria-label="Jump to question" onClick={e => e.stopPropagation()} className="pb-safe w-full animate-sheet rounded-t-3xl bg-paper p-4">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-bold">Questions</h2>
+              <button onClick={() => setShowNav(false)} aria-label="Close" className="flex h-10 w-10 items-center justify-center rounded-lg active:bg-chalk"><X size={20} /></button>
+            </div>
+            <div className="grid grid-cols-5 gap-2 xs:grid-cols-6">
+              {exam.questions.map((eq: any, i: number) => {
+                const answeredQ = !!answers[eq.id];
+                return (
+                  <button
+                    key={eq.id}
+                    onClick={() => { setIndex(i); setShowNav(false); }}
+                    className={cn(
+                      'relative flex h-12 items-center justify-center rounded-xl border text-sm font-bold',
+                      i === index ? 'border-ink bg-ink text-white' : answeredQ ? 'border-tick bg-tick-wash text-tick' : 'border-rule text-muted',
+                    )}
+                  >
+                    {i + 1}
+                    {flagged.has(eq.id) && <Flag size={10} className="absolute -right-1 -top-1 fill-marker text-marker" />}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
-      ))}
+      )}
+
+      <ConfirmDialog
+        open={confirmSubmit}
+        title="Submit your exam?"
+        body={answeredCount < exam.questions.length
+          ? `You have answered ${answeredCount} of ${exam.questions.length} questions. Unanswered questions will be marked wrong.`
+          : 'You will see your score and a breakdown of strong and weak areas.'}
+        confirmLabel="Submit exam"
+        onConfirm={submit}
+        onCancel={() => setConfirmSubmit(false)}
+      />
     </div>
   );
 }

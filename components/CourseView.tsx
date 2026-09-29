@@ -1,358 +1,348 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { callAI, safeJsonParse, cn } from '@/lib/utils';
+import { callAIJSON, cn, errorMessage } from '@/lib/utils';
 import { recordEvidence } from '@/lib/adaptive';
-import { GraduationCap, ChevronDown, ChevronRight, CheckCircle2, Circle, BookOpen, Play, Loader2, Sparkles, RefreshCw } from 'lucide-react';
+import { levelOf, studySubjectText, type ProjectRecord } from '@/lib/project-context';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, Circle, GraduationCap, KeyRound, RefreshCw, Sparkles, TriangleAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
-import ReactMarkdown from 'react-markdown';
+import {
+  Button, ConfirmDialog, EmptyState, ErrorState, GeneratingPanel, OptionRow, ProgressBar, Prose, Skeleton, Surface, splitOption, type OptionState,
+} from '@/components/ui';
 
 interface Props {
   projectId: string; userId: string;
   region: string; persona: string; userGroqKey?: string;
+  onGoToMaterials?: () => void;
 }
 
-export default function CourseView({ projectId, userId, region, persona, userGroqKey }: Props) {
-  const [course, setCourse] = useState<any>(null);
-  const [progress, setProgress] = useState<any>({ completed_lessons: [] });
-  const [generating, setGenerating] = useState(false);
-  const [activeLesson, setActiveLesson] = useState<any>(null);
-  const [expandedModule, setExpandedModule] = useState<string | null>(null);
-  const [quizAnswer, setQuizAnswer] = useState<Record<string, string>>({});
-  const [quizSubmitted, setQuizSubmitted] = useState(false);
-  const [loading, setLoading] = useState(true);
+const STEPS = [
+  'Reading your materials',
+  'Planning modules and lessons',
+  'Writing lessons and worked examples',
+  'Writing practice questions',
+  'Checking everything fits together',
+];
 
-  useEffect(() => {
-    async function load() {
-      const { data: courseData } = await supabase.from('courses').select('*').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(1).single();
-      let progressData: any = null;
+export default function CourseView({ projectId, userId, region, persona, userGroqKey, onGoToMaterials }: Props) {
+  const [course, setCourse] = useState<any>(null);
+  const [project, setProject] = useState<ProjectRecord | null>(null);
+  const [progress, setProgress] = useState<{ completed_lessons: string[] }>({ completed_lessons: [] });
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState('');
+  const [confirmRegen, setConfirmRegen] = useState(false);
+  const [openModule, setOpenModule] = useState<string | null>(null);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [checked, setChecked] = useState(false);
+
+  const load = useCallback(async () => {
+    setStatus('loading');
+    try {
+      const [{ data: proj }, { data: courseData, error }] = await Promise.all([
+        supabase.from('projects').select('*').eq('id', projectId).maybeSingle(),
+        supabase.from('courses').select('*').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(1).maybeSingle(),
+      ]);
+      if (error) throw error;
+      setProject(proj as ProjectRecord | null);
       if (courseData) {
-        const { data } = await supabase.from('course_progress').select('*').eq('course_id', courseData.id).eq('user_id', userId).single();
-        progressData = data;
+        setCourse(courseData);
+        setOpenModule(courseData.modules?.[0]?.id ?? null);
+        const { data: prog } = await supabase.from('course_progress').select('*').eq('course_id', courseData.id).eq('user_id', userId).maybeSingle();
+        if (prog) setProgress({ completed_lessons: prog.completed_lessons || [] });
       }
-      if (courseData) { setCourse(courseData); setExpandedModule(courseData.modules?.[0]?.id); }
-      if (progressData) setProgress(progressData);
-      setLoading(false);
+      setStatus('ready');
+    } catch {
+      setStatus('error');
     }
-    load().catch(() => setLoading(false));
   }, [projectId, userId]);
 
-  const generateCourse = async () => {
+  useEffect(() => { load(); }, [load]);
+
+  const lessons = useMemo(() => (course?.modules || []).flatMap((m: any) => (m.lessons || []).map((l: any) => ({ ...l, moduleTitle: m.title, moduleId: m.id }))), [course]);
+  const active = lessons.find((l: any) => l.id === activeId) || null;
+  const activeIndex = active ? lessons.indexOf(active) : -1;
+  const done = progress.completed_lessons;
+  const pct = lessons.length ? Math.round((done.length / lessons.length) * 100) : 0;
+
+  const generate = async () => {
+    setConfirmRegen(false);
     setGenerating(true);
+    setGenError('');
     try {
-      // Get project documents as context
-      const { data: docs } = await supabase.from('documents').select('content, name')
-        .eq('project_id', projectId).eq('user_id', userId).limit(5);
+      const { data: docs } = await supabase.from('documents').select('content, name').eq('project_id', projectId).eq('user_id', userId).limit(5);
+      const context = (docs || []).map(d => `[${d.name}]\n${d.content}`).join('\n\n').slice(0, 8000);
+      if (!context.trim()) {
+        setGenError('Add at least one document or note in Materials first. Akili builds the course from what you add.');
+        return;
+      }
 
-      const context = docs?.map(d => `[${d.name}]\n${d.content}`).join('\n\n').slice(0, 8000) || '';
-      if (!context) { toast.error('Add study materials first before generating a course'); setGenerating(false); return; }
+      const secondary = project ? levelOf(project) === 'secondary' : false;
+      const topic = project ? studySubjectText(project) : 'the learner’s topic';
+      const prompt = `Create a structured course on "${topic}" from the study materials below.
 
-      const { data: project } = await supabase.from('projects').select('name, subject, exam_type').eq('id', projectId).single();
-
-      const prompt = `Create a comprehensive learning course for ${project?.subject || 'the learner’s topic'} from the following study materials. The learning context is ${project?.exam_type || 'university/self-study/general learning'}. Format it like a Coursera/Udemy course with detailed, educational lessons.
-
-Study Materials:
+Study materials:
 ${context}
 
 Requirements:
-- Minimum 3 modules, each with 2-4 lessons
-- Each lesson: min 300 words of content in markdown, learning objectives, worked example, common mistakes, 3 practice questions
-- Use culturally relevant examples
-- Structure content for the learner's stated learning context; do not assume an exam unless an exam context is explicitly supplied
+- 3 to 5 modules, each with 2 to 4 lessons.
+- Each lesson: learning objectives, ${secondary ? 'clear explanations of at least 250 words' : 'a thorough explanation of at least 350 words'} in markdown, key concepts, one worked example, common mistakes, and 3 practice questions.
+- Practice questions have four options labelled "A) ", "B) ", "C) ", "D) " and correct_answer is just the letter.
+- Use examples that make sense for a learner in ${region}.
+- Base lessons on the materials. Do not invent details about the learner's own course or teacher.
 
 Return JSON:
-{
-  "title": string,
-  "description": string,
-  "estimated_duration": string,
-  "modules": [{
-    "id": string,
-    "module_number": number,
-    "title": string,
-    "estimated_time": string,
-    "lessons": [{
-      "id": string,
-      "lesson_number": number,
-      "title": string,
-      "learning_objectives": [string],
-      "content": "detailed markdown",
-      "key_concepts": [string],
-      "worked_example": { "problem": string, "solution_steps": [string], "answer": string },
-      "common_mistakes": [string],
-      "practice_questions": [{
-        "id": string, "question": string, "concept": string,
-        "options": ["A) ...", "B) ...", "C) ...", "D) ..."],
-        "correct_answer": "A",
-        "explanation": string
-      }]
-    }]
-  }]
-}`;
+{"title": string, "description": string, "estimated_duration": string,
+ "modules": [{"module_number": number, "title": string, "estimated_time": string,
+  "lessons": [{"lesson_number": number, "title": string, "learning_objectives": [string], "content": "markdown", "key_concepts": [string],
+   "worked_example": {"problem": string, "solution_steps": [string], "answer": string},
+   "common_mistakes": [string],
+   "practice_questions": [{"question": string, "concept": string, "options": ["A) ...","B) ...","C) ...","D) ..."], "correct_answer": "A", "explanation": string}]}]}]}`;
 
-      const raw = await callAI({ task: 'course_builder', prompt, region, persona, format: 'json', userGroqKey });
-      const data = safeJsonParse(raw);
-      if (!data?.modules?.length) throw new Error('Course generation returned empty data');
+      const data = await callAIJSON<any>({ task: 'course_builder', prompt, region, persona, userGroqKey, projectId, validationType: 'course' });
 
-      const { data: saved } = await supabase.from('courses').insert({
+      const { data: saved, error } = await supabase.from('courses').insert({
         project_id: projectId, user_id: userId,
         title: data.title, description: data.description,
-        subject: project?.subject, exam_type: project?.exam_type,
+        subject: project?.subject ?? null, exam_type: project?.exam_type ?? null,
         modules: data.modules,
       }).select().single();
+      if (error || !saved) throw new Error('The course was written but could not be saved. Please try again.');
 
-      if (saved) {
-        setCourse(saved);
-        setExpandedModule(data.modules[0]?.id);
-        toast.success('Course generated!');
-      }
-    } catch (err: any) {
-      toast.error(err.message || 'Course generation failed');
+      setCourse(saved);
+      setProgress({ completed_lessons: [] });
+      setOpenModule(data.modules[0]?.id ?? null);
+      setActiveId(null);
+      toast.success('Your course is ready');
+    } catch (err) {
+      setGenError(errorMessage(err, 'Course generation failed. Please try again.'));
     } finally {
       setGenerating(false);
     }
   };
 
-  const markComplete = async (lessonId: string) => {
-    const completed = progress.completed_lessons || [];
-    if (completed.includes(lessonId)) return;
-    const updated = [...completed, lessonId];
+  const openLesson = (id: string) => { setActiveId(id); setAnswers({}); setChecked(false); window.scrollTo({ top: 0 }); };
 
-    await supabase.from('course_progress').upsert({
-      course_id: course.id, user_id: userId,
-      completed_lessons: updated,
-    });
-    setProgress((p: any) => ({ ...p, completed_lessons: updated }));
+  const markComplete = async (lessonId: string) => {
+    if (done.includes(lessonId)) return;
+    const updated = [...done, lessonId];
+    setProgress({ completed_lessons: updated });
+    const { error } = await supabase.from('course_progress').upsert({ course_id: course.id, user_id: userId, completed_lessons: updated });
+    if (error) { setProgress({ completed_lessons: done }); toast.error('Could not save your progress. Try again.'); }
   };
 
-  const totalLessons = course?.modules?.reduce((acc: number, m: any) => acc + (m.lessons?.length || 0), 0) || 0;
-  const completedCount = progress.completed_lessons?.length || 0;
-  const completionPct = totalLessons > 0 ? Math.round((completedCount / totalLessons) * 100) : 0;
+  const checkAnswers = async (lesson: any) => {
+    setChecked(true);
+    for (const q of lesson.practice_questions || []) {
+      try {
+        await recordEvidence({
+          userId, projectId,
+          concept: q.concept || lesson.key_concepts?.[0] || lesson.title,
+          sourceType: 'lesson', interactionType: 'lesson_practice',
+          prompt: q.question, learnerResponse: answers[q.id] || '',
+          correctness: answers[q.id] === q.correct_answer, difficulty: 'developing',
+          evidence: q.explanation || 'Lesson practice result',
+        });
+      } catch { /* progress tracking must never block the lesson */ }
+    }
+  };
 
-  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 size={24} className="animate-spin text-indigo-600" /></div>;
+  // ── States ────────────────────────────────────────────────────────────────
 
-  if (!course) return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <div className="bg-white rounded-3xl p-10 text-center space-y-4">
-        <div className="w-14 h-14 bg-indigo-100 rounded-3xl flex items-center justify-center mx-auto">
-          <GraduationCap size={26} className="text-indigo-600" />
-        </div>
-        <h2 className="text-xl font-black">Generate Your Course</h2>
-        <p className="text-sm text-gray-500">AI will read your uploaded materials and build a structured course with lessons, examples, and practice questions.</p>
-        <p className="text-xs text-amber-600 bg-amber-50 px-4 py-2 rounded-xl">Upload study materials first in the Materials tab</p>
-        <button onClick={generateCourse} disabled={generating}
-          className="flex items-center gap-2 mx-auto bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-8 py-3.5 rounded-2xl font-bold text-sm">
-          {generating ? <><Loader2 size={16} className="animate-spin" /> Building course...</> : <><Sparkles size={16} /> Generate Course</>}
-        </button>
+  if (status === 'loading') {
+    return <div className="space-y-3 p-4"><Skeleton className="h-36 w-full" /><Skeleton className="h-16 w-full" /><Skeleton className="h-16 w-full" /></div>;
+  }
+  if (status === 'error') return <div className="p-4"><ErrorState message="Your course did not load. Check your connection and try again." onRetry={load} /></div>;
+
+  if (generating) {
+    return <div className="p-4"><GeneratingPanel title="Building your course" steps={STEPS} /></div>;
+  }
+
+  if (!course) {
+    return (
+      <div className="space-y-4 p-4">
+        <EmptyState
+          icon={<GraduationCap size={22} />}
+          title="Build your course"
+          action={<Button onClick={generate}><Sparkles size={17} /> Build course</Button>}
+        >
+          Akili reads the notes and documents in Materials and turns them into lessons, worked examples and practice questions.
+        </EmptyState>
+        {genError && (
+          <ErrorState title="No course yet" message={genError} onRetry={genError.includes('Materials') ? undefined : generate}
+          />
+        )}
+        {genError.includes('Materials') && onGoToMaterials && <Button variant="quiet" block onClick={onGoToMaterials}>Go to Materials</Button>}
       </div>
-    </div>
-  );
+    );
+  }
+
+  // ── Lesson reader ─────────────────────────────────────────────────────────
+
+  if (active) {
+    const isDone = done.includes(active.id);
+    const prev = lessons[activeIndex - 1];
+    const next = lessons[activeIndex + 1];
+    const qs: any[] = active.practice_questions || [];
+    const score = qs.filter(q => answers[q.id] === q.correct_answer).length;
+
+    return (
+      <article className="space-y-6 px-4 pb-6 pt-4">
+        <div>
+          <button onClick={() => setActiveId(null)} className="-ml-2 mb-3 inline-flex min-h-11 items-center gap-1.5 rounded-lg px-2 text-sm font-semibold text-biro hover:bg-biro-wash">
+            <ArrowLeft size={16} /> Course outline
+          </button>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted">{active.moduleTitle} · Lesson {activeIndex + 1} of {lessons.length}</p>
+          <h2 className="mt-1 text-2xl font-extrabold leading-tight tracking-tight">{active.title}</h2>
+          {active.learning_objectives?.length > 0 && (
+            <ul className="mt-3 space-y-1.5 rounded-xl bg-biro-wash p-3.5">
+              <li className="text-xs font-bold uppercase tracking-wide text-biro-dark">By the end you can</li>
+              {active.learning_objectives.map((o: string, i: number) => <li key={i} className="flex gap-2 text-sm text-ink"><Check size={16} className="mt-0.5 shrink-0 text-biro" />{o}</li>)}
+            </ul>
+          )}
+        </div>
+
+        <Prose>{active.content}</Prose>
+
+        {active.key_concepts?.length > 0 && (
+          <Surface className="border-marker bg-marker-wash p-4">
+            <p className="mb-2 flex items-center gap-2 text-sm font-bold"><KeyRound size={16} /> Key ideas</p>
+            <div className="flex flex-wrap gap-2">
+              {active.key_concepts.map((c: string, i: number) => <span key={i} className="rounded-lg bg-paper px-2.5 py-1 text-sm font-semibold">{c}</span>)}
+            </div>
+          </Surface>
+        )}
+
+        {active.worked_example && (
+          <Surface className="p-4">
+            <p className="text-xs font-bold uppercase tracking-wide text-muted">Worked example</p>
+            <p className="mt-1.5 font-read text-[1.0625rem] font-semibold leading-snug">{active.worked_example.problem}</p>
+            <ol className="mt-3 space-y-2.5">
+              {active.worked_example.solution_steps?.map((s: string, i: number) => (
+                <li key={i} className="flex gap-3">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-ink text-xs font-bold text-white">{i + 1}</span>
+                  <span className="font-read text-base leading-relaxed">{s}</span>
+                </li>
+              ))}
+            </ol>
+            {active.worked_example.answer && <p className="mt-3 rounded-lg bg-tick-wash px-3 py-2 text-sm font-bold text-tick">Answer: {active.worked_example.answer}</p>}
+          </Surface>
+        )}
+
+        {active.common_mistakes?.length > 0 && (
+          <Surface className="border-redpen/30 p-4">
+            <p className="mb-2 flex items-center gap-2 text-sm font-bold text-redpen"><TriangleAlert size={16} /> Watch out for</p>
+            <ul className="space-y-2">
+              {active.common_mistakes.map((m: string, i: number) => <li key={i} className="font-read text-base leading-relaxed">{m}</li>)}
+            </ul>
+          </Surface>
+        )}
+
+        {qs.length > 0 && (
+          <section aria-label="Practice questions" className="space-y-5">
+            <h3 className="text-lg font-bold">Check your understanding</h3>
+            {qs.map((q, qi) => (
+              <div key={q.id} role="radiogroup" aria-label={`Question ${qi + 1}`} className="space-y-2">
+                <p className="font-read text-[1.0625rem] font-semibold leading-snug">{qi + 1}. {q.question}</p>
+                {q.options?.map((opt: string) => {
+                  const { letter, text } = splitOption(opt);
+                  const picked = answers[q.id] === letter;
+                  let state: OptionState = picked ? 'selected' : 'idle';
+                  if (checked) state = letter === q.correct_answer ? (picked ? 'correct' : 'missed') : picked ? 'wrong' : 'idle';
+                  return <OptionRow key={letter} letter={letter} text={text} state={state} disabled={checked} onClick={() => setAnswers(a => ({ ...a, [q.id]: letter }))} />;
+                })}
+                {checked && q.explanation && <p className="rounded-lg bg-chalk px-3 py-2 text-sm leading-relaxed text-muted">{q.explanation}</p>}
+              </div>
+            ))}
+            {!checked ? (
+              <Button block disabled={Object.keys(answers).length < qs.length} onClick={() => checkAnswers(active)}>Check answers</Button>
+            ) : (
+              <p className="rounded-xl bg-paper p-3 text-center text-sm font-bold">{score} of {qs.length} correct</p>
+            )}
+          </section>
+        )}
+
+        <div className="space-y-2 pt-2">
+          <Button block variant={isDone ? 'quiet' : 'primary'} disabled={isDone} onClick={() => markComplete(active.id)}>
+            <CheckCircle2 size={18} /> {isDone ? 'Lesson completed' : 'Mark as complete'}
+          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button variant="quiet" disabled={!prev} onClick={() => prev && openLesson(prev.id)}><ArrowLeft size={16} /> Previous</Button>
+            <Button variant="dark" disabled={!next} onClick={() => next && openLesson(next.id)}>Next <ArrowRight size={16} /></Button>
+          </div>
+        </div>
+      </article>
+    );
+  }
+
+  // ── Course outline ────────────────────────────────────────────────────────
+
+  const firstOpen = lessons.find((l: any) => !done.includes(l.id)) || lessons[0];
 
   return (
-    <div className="flex h-full">
-      {/* Sidebar — modules */}
-      <div className="w-72 bg-white border-r border-black/8 overflow-y-auto no-scrollbar shrink-0 hidden md:block">
-        <div className="p-4 border-b border-black/8">
-          <p className="font-black text-sm">{course.title}</p>
-          <div className="mt-2">
-            <div className="flex justify-between text-xs text-gray-400 mb-1">
-              <span>{completedCount}/{totalLessons} lessons</span>
-              <span>{completionPct}%</span>
-            </div>
-            <div className="h-1.5 bg-gray-100 rounded-full">
-              <div className="h-1.5 bg-indigo-600 rounded-full transition-all" style={{ width: `${completionPct}%` }} />
-            </div>
-          </div>
+    <div className="space-y-4 p-4">
+      <Surface className="bg-ink p-5 text-white">
+        <p className="text-xs font-semibold uppercase tracking-wide text-marker">Your course</p>
+        <h2 className="mt-1 text-2xl font-extrabold leading-tight">{course.title}</h2>
+        {course.description && <p className="mt-2 text-sm leading-relaxed text-white/75">{course.description}</p>}
+        <div className="mt-4">
+          <div className="mb-1.5 flex justify-between text-xs text-white/70"><span>{done.length} of {lessons.length} lessons done</span><span>{pct}%</span></div>
+          <ProgressBar value={pct} label="Course progress" className="bg-white/20 [&>div]:bg-marker" />
         </div>
-
-        <div className="p-2 space-y-1">
-          {course.modules?.map((mod: any) => (
-            <div key={mod.id}>
-              <button onClick={() => setExpandedModule(expandedModule === mod.id ? null : mod.id)}
-                className="w-full flex items-center gap-2 px-3 py-2.5 hover:bg-gray-50 rounded-xl transition-all">
-                <span className="text-[10px] font-black text-gray-400 w-5">{mod.module_number}</span>
-                <span className="text-xs font-bold flex-1 text-left">{mod.title}</span>
-                {expandedModule === mod.id ? <ChevronDown size={13} className="text-gray-400" /> : <ChevronRight size={13} className="text-gray-400" />}
-              </button>
-              {expandedModule === mod.id && (
-                <div className="ml-4 space-y-0.5">
-                  {mod.lessons?.map((lesson: any) => {
-                    const done = progress.completed_lessons?.includes(lesson.id);
-                    const isActive = activeLesson?.id === lesson.id;
-                    return (
-                      <button key={lesson.id}
-                        onClick={() => { setActiveLesson(lesson); setQuizSubmitted(false); setQuizAnswer({}); }}
-                        className={cn('w-full flex items-center gap-2 px-3 py-2 rounded-xl text-left transition-all',
-                          isActive ? 'bg-indigo-50 text-indigo-700' : 'hover:bg-gray-50')}>
-                        {done
-                          ? <CheckCircle2 size={14} className="text-indigo-600 shrink-0" />
-                          : <Circle size={14} className="text-gray-300 shrink-0" />}
-                        <span className="text-xs truncate">{lesson.lesson_number}. {lesson.title}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-
-        <div className="p-3 border-t border-black/8">
-          <button onClick={generateCourse} disabled={generating}
-            className="w-full flex items-center justify-center gap-1.5 py-2 text-xs text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all">
-            <RefreshCw size={12} /> Regenerate Course
-          </button>
-        </div>
-      </div>
-
-      {/* Main lesson view */}
-      <div className="flex-1 overflow-y-auto no-scrollbar">
-        {!activeLesson ? (
-          <div className="p-6 max-w-2xl mx-auto space-y-4">
-            <div className="bg-gradient-to-br from-indigo-500 to-violet-600 rounded-3xl p-8 text-white">
-              <p className="text-xs font-bold uppercase tracking-wider opacity-70 mb-2">Your Course</p>
-              <h1 className="text-2xl font-black mb-2">{course.title}</h1>
-              <p className="text-indigo-200 text-sm">{course.description}</p>
-              <div className="flex items-center gap-4 mt-4 text-xs text-indigo-200">
-                <span>📚 {totalLessons} lessons</span>
-                <span>⏱ {course.estimated_duration}</span>
-                <span>✅ {completionPct}% complete</span>
-              </div>
-            </div>
-            <p className="text-sm text-gray-500 text-center">Select a lesson from the sidebar to begin</p>
-          </div>
-        ) : (
-          <div className="p-6 max-w-3xl mx-auto space-y-6">
-            <div>
-              <p className="text-xs text-indigo-600 font-semibold mb-1">{activeLesson.title}</p>
-              <div className="flex gap-2 flex-wrap">
-                {activeLesson.learning_objectives?.map((obj: string, i: number) => (
-                  <span key={i} className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-1 rounded-full">{obj}</span>
-                ))}
-              </div>
-            </div>
-
-            {/* Lesson content */}
-            <div className="bg-white rounded-3xl p-6 prose prose-sm max-w-none">
-              <ReactMarkdown>{activeLesson.content}</ReactMarkdown>
-            </div>
-
-            {/* Key concepts */}
-            {activeLesson.key_concepts?.length > 0 && (
-              <div className="bg-indigo-50 rounded-3xl p-5">
-                <p className="font-bold text-sm mb-2">🔑 Key Concepts</p>
-                <div className="flex flex-wrap gap-2">
-                  {activeLesson.key_concepts.map((c: string, i: number) => (
-                    <span key={i} className="bg-white text-indigo-700 text-xs font-semibold px-3 py-1 rounded-full border border-indigo-200">{c}</span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Worked example */}
-            {activeLesson.worked_example && (
-              <div className="bg-amber-50 rounded-3xl p-5 space-y-3">
-                <p className="font-bold text-sm">📐 Worked Example</p>
-                <p className="text-sm font-semibold">{activeLesson.worked_example.problem}</p>
-                <div className="space-y-1">
-                  {activeLesson.worked_example.solution_steps?.map((step: string, i: number) => (
-                    <div key={i} className="flex items-start gap-2 text-sm">
-                      <span className="w-5 h-5 rounded-full bg-amber-200 text-amber-800 flex items-center justify-center text-[10px] font-black shrink-0 mt-0.5">{i + 1}</span>
-                      {step}
-                    </div>
-                  ))}
-                </div>
-                <p className="text-sm font-black text-amber-700">Answer: {activeLesson.worked_example.answer}</p>
-              </div>
-            )}
-
-            {/* Common mistakes */}
-            {activeLesson.common_mistakes?.length > 0 && (
-              <div className="bg-rose-50 rounded-3xl p-5">
-                <p className="font-bold text-sm mb-2">⚠️ Common Mistakes</p>
-                <ul className="space-y-1">
-                  {activeLesson.common_mistakes.map((m: string, i: number) => (
-                    <li key={i} className="text-sm text-rose-700 flex gap-2"><span>•</span>{m}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {/* Practice questions */}
-            {activeLesson.practice_questions?.length > 0 && (
-              <div className="bg-white rounded-3xl p-5 space-y-4">
-                <p className="font-bold text-sm">🎯 Practice Questions</p>
-                {activeLesson.practice_questions.map((q: any, qi: number) => (
-                  <div key={q.id} className="space-y-2">
-                    <p className="text-sm font-semibold">{qi + 1}. {q.question}</p>
-                    <div className="grid grid-cols-1 gap-1.5">
-                      {q.options?.map((opt: string) => {
-                        const letter = opt[0];
-                        const selected = quizAnswer[q.id] === letter;
-                        const correct = quizSubmitted && letter === q.correct_answer;
-                        const wrong = quizSubmitted && selected && letter !== q.correct_answer;
-                        return (
-                          <button key={opt} disabled={quizSubmitted}
-                            onClick={() => setQuizAnswer(p => ({ ...p, [q.id]: letter }))}
-                            className={cn('text-left px-3 py-2 rounded-xl text-sm border transition-all',
-                              correct ? 'border-emerald-500 bg-emerald-50 text-emerald-700' :
-                              wrong ? 'border-rose-400 bg-rose-50 text-rose-700' :
-                              selected ? 'border-indigo-500 bg-indigo-50' :
-                              'border-gray-200 hover:border-indigo-300')}>
-                            {opt}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {quizSubmitted && q.explanation && (
-                      <p className="text-xs text-gray-500 pl-1">💡 {q.explanation}</p>
-                    )}
-                  </div>
-                ))}
-
-                {!quizSubmitted ? (
-                  <button onClick={async () => {
-                    setQuizSubmitted(true);
-                    for (const q of activeLesson.practice_questions) {
-                      const correct = quizAnswer[q.id] === q.correct_answer;
-                      await recordEvidence({
-                        userId, projectId,
-                        concept: q.concept || activeLesson.key_concepts?.[0] || activeLesson.title,
-                        sourceType: 'lesson',
-                        interactionType: 'lesson_practice',
-                        prompt: q.question,
-                        learnerResponse: quizAnswer[q.id] || '',
-                        correctness: correct,
-                        difficulty: 'developing',
-                        evidence: q.explanation || 'Lesson practice result',
-                      });
-                    }
-                  }} disabled={Object.keys(quizAnswer).length < activeLesson.practice_questions.length}
-                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 text-white rounded-xl text-sm font-bold">
-                    Check Answers
-                  </button>
-                ) : (
-                  <div className="flex items-center gap-3">
-                    <p className="text-sm font-bold text-indigo-600">
-                      {activeLesson.practice_questions.filter((q: any) => quizAnswer[q.id] === q.correct_answer).length}/{activeLesson.practice_questions.length} correct
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Complete button */}
-            <button onClick={() => markComplete(activeLesson.id)}
-              disabled={progress.completed_lessons?.includes(activeLesson.id)}
-              className={cn('w-full py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all',
-                progress.completed_lessons?.includes(activeLesson.id)
-                  ? 'bg-emerald-50 text-emerald-600 border border-emerald-200'
-                  : 'bg-indigo-600 hover:bg-indigo-700 text-white')}>
-              <CheckCircle2 size={16} />
-              {progress.completed_lessons?.includes(activeLesson.id) ? 'Lesson Completed ✓' : 'Mark as Complete'}
-            </button>
-          </div>
+        {firstOpen && (
+          <Button block className="mt-4 bg-marker text-ink hover:bg-marker/90 active:bg-marker/90" onClick={() => openLesson(firstOpen.id)}>
+            {done.length ? 'Continue learning' : 'Start first lesson'} <ArrowRight size={17} />
+          </Button>
         )}
-      </div>
+      </Surface>
+
+      {genError && <ErrorState title="Course not updated" message={genError} />}
+
+      <ul className="space-y-2">
+        {(course.modules || []).map((mod: any) => {
+          const open = openModule === mod.id;
+          const finished = (mod.lessons || []).filter((l: any) => done.includes(l.id)).length;
+          return (
+            <li key={mod.id}>
+              <Surface className="overflow-hidden">
+                <button onClick={() => setOpenModule(open ? null : mod.id)} aria-expanded={open} className="flex min-h-16 w-full items-center gap-3 p-4 text-left active:bg-chalk">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-chalk text-sm font-extrabold">{mod.module_number}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block font-bold leading-snug">{mod.title}</span>
+                    <span className="block text-xs text-muted">{finished}/{mod.lessons?.length || 0} lessons{mod.estimated_time ? ` · ${mod.estimated_time}` : ''}</span>
+                  </span>
+                  <ChevronDown size={18} className={cn('shrink-0 text-muted transition-transform', open && 'rotate-180')} />
+                </button>
+                {open && (
+                  <ul className="border-t border-rule">
+                    {(mod.lessons || []).map((l: any) => (
+                      <li key={l.id}>
+                        <button onClick={() => openLesson(l.id)} className="flex min-h-14 w-full items-center gap-3 border-b border-rule px-4 py-2 text-left last:border-b-0 active:bg-chalk">
+                          {done.includes(l.id) ? <CheckCircle2 size={20} className="shrink-0 text-tick" /> : <Circle size={20} className="shrink-0 text-rule" />}
+                          <span className="flex-1 text-[15px] font-medium leading-snug">{l.lesson_number}. {l.title}</span>
+                          <ArrowRight size={16} className="shrink-0 text-muted" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </Surface>
+            </li>
+          );
+        })}
+      </ul>
+
+      <Button variant="ghost" block onClick={() => setConfirmRegen(true)}><RefreshCw size={16} /> Rebuild course from my materials</Button>
+
+      <ConfirmDialog
+        open={confirmRegen}
+        title="Rebuild this course?"
+        body="Akili writes a new course from your current materials. Your lesson progress in the old course will not carry over."
+        confirmLabel="Rebuild course"
+        onConfirm={generate}
+        onCancel={() => setConfirmRegen(false)}
+      />
     </div>
   );
 }

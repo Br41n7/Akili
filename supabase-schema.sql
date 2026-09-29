@@ -120,6 +120,15 @@ CREATE TABLE projects (
   exam_type TEXT,
   source TEXT DEFAULT 'manual' CHECK (source IN ('manual','pastq','upload')),
   source_bank_id UUID REFERENCES question_banks(id),
+  -- Project context (see supabase-project-context-migration.sql)
+  education_level TEXT CHECK (education_level IS NULL OR education_level IN ('university','secondary')),
+  exam_board TEXT,
+  class_level TEXT,
+  institution TEXT,
+  department TEXT,
+  course_code TEXT,
+  study_year TEXT,
+  study_goal TEXT CHECK (study_goal IS NULL OR study_goal IN ('exam_prep','coursework','self_study')),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );

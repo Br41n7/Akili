@@ -1,113 +1,136 @@
-// ─── Flashcards ───────────────────────────────────────────────────────────────
 'use client';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { callAI, safeJsonParse, cn } from '@/lib/utils';
-import { Sparkles, Loader2, RotateCcw, Plus, Trash2, BarChart3, TrendingUp, AlertTriangle, Lightbulb } from 'lucide-react';
+import { callAIJSON, cn, errorMessage } from '@/lib/utils';
+import { Plus, Sparkles, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Button, ChoiceChips, ConfirmDialog, EmptyState, ErrorState, Field, ListSkeleton, TextInput } from '@/components/ui';
 
-// ─────────────────────────────────────────────────────────────────────────────
-export function Flashcards({ projectId, userId, region }: { projectId: string; userId: string; region: string }) {
+interface Props { projectId: string; userId: string; region: string }
+
+const STYLES = [
+  { value: 'story', label: 'Story' },
+  { value: 'acronym', label: 'Acronym' },
+  { value: 'funny', label: 'Funny' },
+  { value: 'academic', label: 'Academic' },
+  { value: 'african-themed', label: 'African' },
+] as const;
+type Style = (typeof STYLES)[number]['value'];
+
+export function Flashcards({ projectId, userId, region }: Props) {
   const [cards, setCards] = useState<any[]>([]);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [concept, setConcept] = useState('');
-  const [style, setStyle] = useState('story');
+  const [style, setStyle] = useState<Style>('story');
   const [generating, setGenerating] = useState(false);
+  const [genError, setGenError] = useState('');
   const [flipped, setFlipped] = useState<Record<string, boolean>>({});
+  const [toDelete, setToDelete] = useState<any>(null);
 
-  const STYLES = [
-    { id: 'story', label: 'Story' },
-    { id: 'acronym', label: 'Acronym' },
-    { id: 'funny', label: 'Funny' },
-    { id: 'academic', label: 'Academic' },
-    { id: 'african-themed', label: 'African 🌍' },
-  ];
-
-  useEffect(() => {
-    supabase.from('flashcards').select('*').eq('project_id', projectId).eq('user_id', userId)
-      .order('created_at', { ascending: false }).then(({ data }) => setCards(data || []));
-  }, [projectId, userId]);
-
-  const generate = async () => {
-    if (!concept.trim()) return;
-    setGenerating(true);
-    try {
-      const prompt = `Create a ${style} mnemonic to remember: "${concept}".
-Return JSON: { "mnemonic": string, "explanation": string }`;
-      const raw = await callAI({ task: 'mnemonic', prompt, region, format: 'json' });
-      const data = safeJsonParse(raw);
-      if (!data?.mnemonic) throw new Error('Generation failed');
-
-      const { data: card } = await supabase.from('flashcards').insert({
-        project_id: projectId, user_id: userId,
-        concept: concept.trim(), style,
-        mnemonic: data.mnemonic, explanation: data.explanation,
-      }).select().single();
-
-      if (card) { setCards(p => [card, ...p]); setConcept(''); }
-      toast.success('Flashcard created!');
-    } catch (err: any) { toast.error(err.message); }
-    finally { setGenerating(false); }
+  const load = () => {
+    setStatus('loading');
+    supabase.from('flashcards').select('*').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false })
+      .then(({ data, error }) => { if (error) { setStatus('error'); return; } setCards(data || []); setStatus('ready'); });
   };
 
-  const deleteCard = async (id: string) => {
-    await supabase.from('flashcards').delete().eq('id', id);
-    setCards(p => p.filter(c => c.id !== id));
+  useEffect(load, [projectId, userId]);
+
+  const generate = async () => {
+    const term = concept.trim();
+    if (!term) return;
+    setGenerating(true); setGenError('');
+    try {
+      const prompt = `Create a ${style} mnemonic to remember: "${term}".
+Return JSON: { "mnemonic": string, "explanation": string, "type": "${style}" }`;
+      const data = await callAIJSON<any>({ task: 'mnemonic', prompt, region, projectId, validationType: 'flashcard' });
+
+      const { data: card, error } = await supabase.from('flashcards')
+        .insert({ project_id: projectId, user_id: userId, concept: term, style, mnemonic: data.mnemonic, explanation: data.explanation })
+        .select().single();
+      if (error || !card) throw new Error('The flashcard was made but could not be saved. Please try again.');
+
+      setCards(p => [card, ...p]);
+      setConcept('');
+      toast.success('Flashcard created');
+    } catch (err) {
+      setGenError(errorMessage(err, 'Could not create that flashcard. Please try again.'));
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const confirmDelete = async () => {
+    if (!toDelete) return;
+    const { error } = await supabase.from('flashcards').delete().eq('id', toDelete.id);
+    if (error) { toast.error('Could not delete the flashcard.'); return; }
+    setCards(p => p.filter(c => c.id !== toDelete.id));
+    setToDelete(null);
   };
 
   return (
-    <div className="p-4 max-w-2xl mx-auto space-y-4">
-      <div className="bg-white rounded-3xl p-5 space-y-3">
-        <h2 className="font-black flex items-center gap-2"><Sparkles size={18} className="text-indigo-600" /> Flashcards</h2>
-        <input value={concept} onChange={e => setConcept(e.target.value)} placeholder="What concept do you want to remember?"
-          className="w-full px-4 py-3 rounded-2xl border border-gray-200 text-sm focus:outline-none focus:border-indigo-500" />
-        <div className="flex gap-2 flex-wrap">
-          {STYLES.map(s => (
-            <button key={s.id} onClick={() => setStyle(s.id)}
-              className={cn('px-3 py-1.5 rounded-full text-xs font-bold transition-all', style === s.id ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500')}>
-              {s.label}
-            </button>
-          ))}
-        </div>
-        <button onClick={generate} disabled={!concept.trim() || generating}
-          className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2">
-          {generating ? <><Loader2 size={15} className="animate-spin" /> Creating...</> : <><Plus size={15} /> Create Card</>}
-        </button>
+    <div className="mx-auto max-w-2xl space-y-4 p-4">
+      <div className="space-y-3 rounded-2xl border border-rule bg-paper p-4">
+        <h2 className="flex items-center gap-2 font-bold"><Sparkles size={18} className="text-biro" /> New flashcard</h2>
+        <Field label="Concept to remember" htmlFor="fc-concept">
+          <TextInput id="fc-concept" value={concept} onChange={e => setConcept(e.target.value)} placeholder="e.g. Order of mitosis" maxLength={120} onKeyDown={e => e.key === 'Enter' && generate()} />
+        </Field>
+        <ChoiceChips<Style> label="Mnemonic style" options={STYLES as any} value={style} onChange={setStyle} />
+        <Button block disabled={!concept.trim()} loading={generating} onClick={generate}><Plus size={16} /> Create flashcard</Button>
+        {genError && <p role="alert" className="text-sm text-redpen">{genError}</p>}
       </div>
 
-      <div className="grid gap-4">
-        {cards.map(card => (
-          <div key={card.id}
-            onClick={() => setFlipped(p => ({ ...p, [card.id]: !p[card.id] }))}
-            className="relative h-40 cursor-pointer">
-            <div className="absolute inset-0 transition-all duration-500"
-              style={{ transformStyle: 'preserve-3d', transform: flipped[card.id] ? 'rotateY(180deg)' : '' }}>
-              {/* Front */}
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-3xl flex flex-col items-center justify-center p-5 text-center"
-                style={{ backfaceVisibility: 'hidden' }}>
-                <p className="text-white font-black text-lg">{card.mnemonic}</p>
-                <p className="text-indigo-200 text-xs mt-2">Tap to reveal</p>
-              </div>
-              {/* Back */}
-              <div className="absolute inset-0 bg-white border border-black/5 rounded-3xl flex flex-col items-center justify-center p-5 text-center"
-                style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}>
-                <p className="text-xs font-bold text-indigo-600 mb-2">{card.concept}</p>
-                <p className="text-sm text-gray-600">{card.explanation}</p>
-                <button onClick={e => { e.stopPropagation(); deleteCard(card.id); }}
-                  className="absolute top-3 right-3 p-1.5 text-gray-300 hover:text-rose-500 transition-all">
-                  <Trash2 size={13} />
-                </button>
-              </div>
-            </div>
-          </div>
-        ))}
-        {cards.length === 0 && <p className="text-center py-8 text-gray-400 text-sm">No flashcards yet — create your first one above</p>}
-      </div>
+      {status === 'loading' && <ListSkeleton rows={2} />}
+      {status === 'error' && <ErrorState message="Your flashcards did not load. Check your connection and try again." onRetry={load} />}
+
+      {status === 'ready' && cards.length === 0 && (
+        <EmptyState icon={<Sparkles size={22} />} title="No flashcards yet">Add a concept above and Akili writes a memory aid for it.</EmptyState>
+      )}
+
+      {status === 'ready' && cards.length > 0 && (
+        <div className="grid grid-cols-1 gap-3 xs:grid-cols-2">
+          {cards.map(card => {
+            const isFlipped = !!flipped[card.id];
+            return (
+              <button
+                key={card.id}
+                onClick={() => setFlipped(p => ({ ...p, [card.id]: !p[card.id] }))}
+                aria-label={isFlipped ? `${card.concept}: ${card.explanation}` : `${card.mnemonic}. Tap to reveal`}
+                className="relative h-44 [perspective:1000px]"
+              >
+                <div className="relative h-full w-full transition-transform duration-500 [transform-style:preserve-3d]" style={{ transform: isFlipped ? 'rotateY(180deg)' : undefined }}>
+                  <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl bg-ink p-4 text-center [backface-visibility:hidden]">
+                    <p className="font-read text-lg font-bold leading-snug text-white">{card.mnemonic}</p>
+                    <p className="mt-2 text-xs text-white/60">Tap to reveal</p>
+                  </div>
+                  <div className={cn('absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-rule bg-paper p-4 text-center [backface-visibility:hidden]')} style={{ transform: 'rotateY(180deg)' }}>
+                    <p className="mb-1.5 text-xs font-bold text-biro">{card.concept}</p>
+                    <p className="font-read text-sm leading-relaxed text-ink">{card.explanation}</p>
+                    <span
+                      role="button"
+                      aria-label="Delete flashcard"
+                      onClick={e => { e.stopPropagation(); setToDelete(card); }}
+                      className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-lg text-muted hover:text-redpen active:bg-redpen-wash"
+                    >
+                      <Trash2 size={15} />
+                    </span>
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={!!toDelete}
+        title="Delete this flashcard?"
+        confirmLabel="Delete"
+        danger
+        onConfirm={confirmDelete}
+        onCancel={() => setToDelete(null)}
+      />
     </div>
   );
 }
 
 export default Flashcards;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// AskAI — in separate file
-// ─────────────────────────────────────────────────────────────────────────────

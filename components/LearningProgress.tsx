@@ -1,89 +1,116 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Brain, CheckCircle2, Target, Loader2, RefreshCw } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { Brain, CheckCircle2, RefreshCw, Target } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Button, EmptyState, ErrorState, Field, ProgressBar, Skeleton, Surface, TextInput } from '@/components/ui';
 
-interface Props { projectId: string; userId: string; }
+interface Props { projectId: string; userId: string }
+
+const splitList = (v: string) => v.split(',').map(x => x.trim()).filter(Boolean);
 
 export default function LearningProgress({ projectId, userId }: Props) {
   const [concepts, setConcepts] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [context, setContext] = useState({ foods: '', transport: '', objects: '' });
   const [savingContext, setSavingContext] = useState(false);
 
   const load = async () => {
-    setLoading(true);
-    const { data } = await supabase.from('learner_concepts').select('*').eq('project_id', projectId).eq('user_id', userId).order('mastery_score', { ascending: true });
+    setStatus('loading');
+    const { data, error } = await supabase.from('learner_concepts').select('*').eq('project_id', projectId).eq('user_id', userId).order('mastery_score', { ascending: true });
+    if (error) { setStatus('error'); return; }
     setConcepts(data || []);
-    setLoading(false);
+    setStatus('ready');
   };
 
-  useEffect(() => { load(); supabase.from('profiles').select('region_context').eq('id', userId).single().then(({ data }) => { const c = data?.region_context || {}; setContext({ foods: (c.foods || []).join(', '), transport: (c.transport || []).join(', '), objects: (c.objects || []).join(', ') }); }); }, [projectId, userId]);
+  useEffect(() => {
+    load();
+    supabase.from('profiles').select('region_context').eq('id', userId).maybeSingle().then(({ data }) => {
+      const c = data?.region_context || {};
+      setContext({ foods: (c.foods || []).join(', '), transport: (c.transport || []).join(', '), objects: (c.objects || []).join(', ') });
+    });
+  }, [projectId, userId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveContext = async () => {
     setSavingContext(true);
-    const region_context = { foods: context.foods.split(',').map(x => x.trim()).filter(Boolean), transport: context.transport.split(',').map(x => x.trim()).filter(Boolean), objects: context.objects.split(',').map(x => x.trim()).filter(Boolean) };
+    const region_context = { foods: splitList(context.foods), transport: splitList(context.transport), objects: splitList(context.objects) };
     const { error } = await supabase.from('profiles').update({ region_context }).eq('id', userId);
     setSavingContext(false);
-    if (error) alert(error.message);
+    if (error) toast.error('Could not save. Please try again.');
+    else toast.success('Saved');
   };
 
-  const weak = concepts.filter(c => Number(c.mastery_score) < 0.70).slice(0, 6);
-  const strong = concepts.filter(c => Number(c.mastery_score) >= 0.70).slice(0, 6);
+  if (status === 'loading') return <div className="space-y-3 p-4"><Skeleton className="h-32 w-full" /><Skeleton className="h-40 w-full" /></div>;
+  if (status === 'error') return <div className="p-4"><ErrorState message="Your learning profile did not load. Check your connection and try again." onRetry={load} /></div>;
+
+  const weak = concepts.filter(c => Number(c.mastery_score) < 0.7).slice(0, 6);
+  const strong = concepts.filter(c => Number(c.mastery_score) >= 0.7).slice(0, 6);
   const focus = weak[0];
 
-  if (loading) return <div className="flex items-center justify-center py-20"><Loader2 size={24} className="animate-spin text-indigo-600" /></div>;
-
   return (
-    <div className="p-4 max-w-3xl mx-auto space-y-4">
-      <div className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white rounded-3xl p-6">
-        <div className="flex items-center justify-between">
-          <div><p className="text-xs font-bold uppercase tracking-wider opacity-70">Adaptive learning</p><h2 className="text-2xl font-black mt-1">What Akili thinks you should work on</h2></div>
-          <Brain size={30} className="opacity-80" />
+    <div className="mx-auto max-w-3xl space-y-4 p-4">
+      <Surface className="bg-ink p-5 text-white">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wide text-marker">Adaptive learning</p>
+            <h2 className="mt-1 text-xl font-extrabold leading-tight">What to work on next</h2>
+          </div>
+          <Brain size={26} className="shrink-0 opacity-70" />
         </div>
-        <p className="text-sm text-indigo-100 mt-3">These are estimates based on your answers and practice evidence, not a measure of intelligence.</p>
-      </div>
+        <p className="mt-2.5 text-sm leading-relaxed text-white/70">Estimated from your answers and practice, not a measure of how smart you are.</p>
+      </Surface>
 
       {focus ? (
-        <div className="bg-white rounded-3xl p-5 border border-indigo-100">
-          <div className="flex items-center gap-2 text-indigo-600 text-xs font-bold"><Target size={15} /> CURRENT FOCUS</div>
-          <p className="text-xl font-black mt-2">{focus.concept}</p>
-          <p className="text-sm text-gray-500 mt-1">{focus.misconception ? `Possible confusion: ${focus.misconception}` : 'More practice will help Akili understand your level here.'}</p>
-          <div className="mt-4 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-indigo-600 rounded-full" style={{ width: `${Math.round(Number(focus.mastery_score) * 100)}%` }} /></div>
-        </div>
+        <Surface className="border-biro/30 p-4">
+          <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-biro-dark"><Target size={14} /> Current focus</p>
+          <p className="mt-1.5 text-xl font-extrabold leading-tight">{focus.concept}</p>
+          <p className="mt-1 text-sm text-muted">{focus.misconception ? `Possible confusion: ${focus.misconception}` : 'More practice will sharpen this estimate.'}</p>
+          <ProgressBar value={Number(focus.mastery_score) * 100} label={`${focus.concept} mastery`} className="mt-3" />
+        </Surface>
+      ) : concepts.length === 0 ? (
+        <EmptyState icon={<Brain size={22} />} title="Nothing to show yet">Take a quiz or exam and your learning profile will build up here.</EmptyState>
       ) : (
-        <div className="bg-emerald-50 rounded-3xl p-5 text-emerald-700"><p className="font-bold">No major weak area detected yet.</p><p className="text-sm mt-1">Keep practicing so Akili can gather stronger evidence.</p></div>
+        <Surface className="border-tick/30 bg-tick-wash p-4">
+          <p className="font-bold text-tick">No weak areas standing out yet</p>
+          <p className="mt-1 text-sm text-ink/70">Keep practicing so Akili can gather stronger evidence.</p>
+        </Surface>
       )}
 
-      <div className="grid md:grid-cols-2 gap-4">
-        <section className="bg-white rounded-3xl p-5">
-          <div className="flex items-center gap-2 font-bold text-sm text-rose-700 mb-3"><Target size={15} /> Needs practice</div>
-          {weak.length === 0 ? <p className="text-sm text-gray-400">Nothing flagged yet.</p> : weak.map(c => (
-            <div key={c.id} className="py-3 border-b last:border-0 border-gray-100">
-              <div className="flex justify-between gap-2"><span className="text-sm font-semibold">{c.concept}</span><span className="text-xs text-gray-400 capitalize">{c.learning_stage}</span></div>
-              <p className="text-[11px] text-gray-400 mt-1">{c.correct_count} correct · {c.incorrect_count} incorrect</p>
+      <div className="grid gap-3 md:grid-cols-2">
+        <Surface className="p-4">
+          <p className="mb-2.5 flex items-center gap-1.5 text-sm font-bold text-redpen"><Target size={14} /> Needs practice</p>
+          {weak.length === 0 ? <p className="text-sm text-muted">Nothing flagged yet.</p> : weak.map(c => (
+            <div key={c.id} className="border-b border-rule py-2.5 last:border-0">
+              <div className="flex items-baseline justify-between gap-2"><span className="text-sm font-semibold">{c.concept}</span><span className="shrink-0 text-xs capitalize text-muted">{c.learning_stage}</span></div>
+              <p className="mt-0.5 text-xs text-muted">{c.correct_count} correct · {c.incorrect_count} incorrect</p>
             </div>
           ))}
-        </section>
-        <section className="bg-white rounded-3xl p-5">
-          <div className="flex items-center gap-2 font-bold text-sm text-emerald-700 mb-3"><CheckCircle2 size={15} /> Strong evidence</div>
-          {strong.length === 0 ? <p className="text-sm text-gray-400">Keep practicing to build evidence.</p> : strong.map(c => (
-            <div key={c.id} className="py-3 border-b last:border-0 border-gray-100">
-              <div className="flex justify-between gap-2"><span className="text-sm font-semibold">{c.concept}</span><span className="text-xs text-gray-400">{Math.round(Number(c.mastery_score) * 100)}%</span></div>
-              <p className="text-[11px] text-gray-400 mt-1">{c.learning_stage}</p>
+        </Surface>
+        <Surface className="p-4">
+          <p className="mb-2.5 flex items-center gap-1.5 text-sm font-bold text-tick"><CheckCircle2 size={14} /> Strong evidence</p>
+          {strong.length === 0 ? <p className="text-sm text-muted">Keep practicing to build evidence.</p> : strong.map(c => (
+            <div key={c.id} className="border-b border-rule py-2.5 last:border-0">
+              <div className="flex items-baseline justify-between gap-2"><span className="text-sm font-semibold">{c.concept}</span><span className="shrink-0 text-xs text-muted">{Math.round(Number(c.mastery_score) * 100)}%</span></div>
+              <p className="mt-0.5 text-xs capitalize text-muted">{c.learning_stage}</p>
             </div>
           ))}
-        </section>
+        </Surface>
       </div>
 
+      <Surface className="space-y-3 p-4">
+        <div>
+          <p className="text-sm font-bold">Your familiar context</p>
+          <p className="mt-0.5 text-xs text-muted">Add foods, transport or everyday things you recognize, so examples feel familiar. Separate items with commas.</p>
+        </div>
+        {(['foods', 'transport', 'objects'] as const).map(k => (
+          <Field key={k} label={k[0].toUpperCase() + k.slice(1)} htmlFor={`ctx-${k}`} optional>
+            <TextInput id={`ctx-${k}`} value={context[k]} onChange={e => setContext(c => ({ ...c, [k]: e.target.value }))} placeholder="e.g. item 1, item 2" />
+          </Field>
+        ))}
+        <Button loading={savingContext} onClick={saveContext}>Save</Button>
+      </Surface>
 
-      <section className="bg-white rounded-3xl p-5 space-y-3">
-        <div><p className="font-bold text-sm">Your familiar context</p><p className="text-xs text-gray-500 mt-1">Akili should not rely on one hardcoded example. Add foods, transport or everyday things you actually recognize. Separate items with commas.</p></div>
-        {(['foods','transport','objects'] as const).map(k => <input key={k} value={context[k]} onChange={e => setContext(c => ({ ...c, [k]: e.target.value }))} placeholder={`${k[0].toUpperCase()+k.slice(1)} e.g. item 1, item 2`} className="w-full px-3 py-2.5 rounded-xl border border-gray-200 text-sm focus:outline-none focus:border-indigo-500" />)}
-        <button onClick={saveContext} disabled={savingContext} className="px-4 py-2.5 rounded-xl bg-indigo-600 text-white text-sm font-bold disabled:opacity-50">{savingContext ? 'Saving...' : 'Save familiar context'}</button>
-      </section>
-      <button onClick={load} className={cn('w-full py-3 bg-white border border-gray-200 rounded-2xl text-sm font-bold text-gray-600 flex items-center justify-center gap-2 hover:border-indigo-300')}><RefreshCw size={14} /> Refresh learning profile</button>
+      <Button variant="quiet" block onClick={load}><RefreshCw size={15} /> Refresh learning profile</Button>
     </div>
   );
 }

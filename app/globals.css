@@ -4,10 +4,42 @@
 
 @layer base {
   * { box-sizing: border-box; }
-  body { @apply antialiased; }
+  html { -webkit-text-size-adjust: 100%; scroll-padding-top: 4.5rem; }
+  body { @apply bg-chalk text-ink font-ui antialiased; }
+  :focus-visible { outline: 2px solid #2F45D0; outline-offset: 2px; border-radius: 6px; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  ::selection { background: #F5D547; color: #16204A; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+  }
 }
 
 @layer utilities {
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .pb-safe { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+  .pt-safe { padding-top: env(safe-area-inset-top); }
 }
+
+/* Reading text: lessons, explanations, question stems */
+.prose-akili { font-family: var(--font-read), Georgia, serif; font-size: 1.0625rem; line-height: 1.75; color: #16204A; overflow-wrap: anywhere; }
+.prose-akili > * + * { margin-top: 1em; }
+.prose-akili h1, .prose-akili h2, .prose-akili h3, .prose-akili h4 { font-family: var(--font-ui), system-ui, sans-serif; font-weight: 700; line-height: 1.25; margin-top: 1.6em; }
+.prose-akili h1 { font-size: 1.5rem; }
+.prose-akili h2 { font-size: 1.3rem; }
+.prose-akili h3 { font-size: 1.125rem; }
+.prose-akili ul, .prose-akili ol { padding-left: 1.4em; }
+.prose-akili ul { list-style: disc; }
+.prose-akili ol { list-style: decimal; }
+.prose-akili li + li { margin-top: 0.4em; }
+.prose-akili strong { font-weight: 700; }
+.prose-akili a { color: #2F45D0; text-decoration: underline; text-underline-offset: 3px; }
+.prose-akili blockquote { border-left: 3px solid #F5D547; padding-left: 1em; color: #2A3566; }
+.prose-akili code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; background: #E9ECFB; padding: 0.1em 0.35em; border-radius: 4px; }
+.prose-akili pre { background: #16204A; color: #F4F5F7; padding: 1em; border-radius: 12px; overflow-x: auto; font-size: 0.9rem; line-height: 1.6; }
+.prose-akili pre code { background: transparent; padding: 0; color: inherit; }
+.prose-akili table { display: block; width: 100%; overflow-x: auto; border-collapse: collapse; font-family: var(--font-ui), system-ui, sans-serif; font-size: 0.95rem; }
+.prose-akili th, .prose-akili td { border: 1px solid #DCE0E9; padding: 0.5em 0.75em; text-align: left; }
+.prose-akili th { background: #F4F5F7; font-weight: 600; }
+.prose-akili hr { border: 0; border-top: 1px solid #DCE0E9; }
+.prose-akili img { max-width: 100%; height: auto; border-radius: 8px; }

@@ -1,133 +1,86 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { BarChart3, TrendingUp, AlertTriangle, Lightbulb, Loader2 } from 'lucide-react';
+import { BarChart3, TrendingUp, TriangleAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Chip, EmptyState, ErrorState, Skeleton, Surface } from '@/components/ui';
 
-interface Props { projectId: string; examType?: string; }
+interface Props { projectId: string; examType?: string; isSecondary?: boolean }
 
-export default function TopicAnalysis({ projectId, examType }: Props) {
+export default function TopicAnalysis({ projectId, examType, isSecondary }: Props) {
   const [course, setCourse] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
-  useEffect(() => {
+  const load = () => {
+    setStatus('loading');
     supabase.from('courses').select('topic_frequency, predicted_topics, title, subject')
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
-      .then(({ data }) => { setCourse(data); setLoading(false); });
-  }, [projectId]);
+      .eq('project_id', projectId).order('created_at', { ascending: false }).limit(1).maybeSingle()
+      .then(({ data, error }) => { if (error) { setStatus('error'); return; } setCourse(data); setStatus('ready'); });
+  };
 
-  if (loading) return (
-    <div className="flex items-center justify-center py-20">
-      <Loader2 size={24} className="animate-spin text-indigo-600" />
-    </div>
-  );
+  useEffect(load, [projectId]);
 
-  if (!course?.topic_frequency?.length) return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <div className="bg-white rounded-3xl p-10 text-center space-y-3">
-        <BarChart3 size={32} className="mx-auto text-gray-300" />
-        <p className="font-bold text-gray-500">No Topic Analysis Yet</p>
-        <p className="text-sm text-gray-400">
-          Import a question bank from PastQ — AI automatically analyses which topics appear most often and predicts what's likely to come next.
-        </p>
+  if (status === 'loading') return <div className="space-y-3 p-4"><Skeleton className="h-24 w-full" /><Skeleton className="h-40 w-full" /></div>;
+  if (status === 'error') return <div className="p-4"><ErrorState message="Topic analysis did not load. Check your connection and try again." onRetry={load} /></div>;
+
+  if (!course?.topic_frequency?.length) {
+    return (
+      <div className="p-4">
+        <EmptyState icon={<BarChart3 size={22} />} title="No topic analysis yet">
+          Import a question bank from PastQ. Akili works out which topics come up most and which ones look overdue.
+        </EmptyState>
       </div>
-    </div>
-  );
+    );
+  }
 
-  const maxCount = Math.max(...(course.topic_frequency || []).map((t: any) => t.count));
+  const sorted = [...course.topic_frequency].sort((a: any, b: any) => b.count - a.count);
+  const maxCount = Math.max(...sorted.map((t: any) => t.count));
+  const totalQuestions = course.topic_frequency.reduce((a: number, t: any) => a + t.count, 0);
 
   return (
-    <div className="p-4 max-w-2xl mx-auto space-y-4">
-      <div className="bg-gradient-to-br from-indigo-500 to-violet-600 rounded-3xl p-5 text-white">
-        <p className="text-xs font-bold uppercase tracking-wider opacity-70 mb-1">
-          {examType || 'Exam'} Pattern Analysis
-        </p>
-        <h2 className="text-xl font-black">{course.subject} Topic Frequency</h2>
-        <p className="text-indigo-200 text-xs mt-1">
-          Based on {course.topic_frequency.reduce((a: number, t: any) => a + t.count, 0)} past questions
-        </p>
-      </div>
+    <div className="space-y-4 p-4">
+      <Surface className="bg-ink p-5 text-white">
+        <p className="text-xs font-semibold uppercase tracking-wide text-marker">{isSecondary ? `${examType || 'Exam'} pattern analysis` : 'Question bank analysis'}</p>
+        <h2 className="mt-1 text-xl font-extrabold leading-tight">{course.subject || course.title} topic frequency</h2>
+        <p className="mt-1 text-sm text-white/70">Based on {totalQuestions} past questions</p>
+      </Surface>
 
-      {/* Topic frequency bars */}
-      <div className="bg-white rounded-3xl p-5 space-y-3">
-        <h3 className="font-bold text-sm flex items-center gap-2">
-          <BarChart3 size={16} className="text-indigo-600" /> Topic Frequency
-        </h3>
-        {(course.topic_frequency || [])
-          .sort((a: any, b: any) => b.count - a.count)
-          .slice(0, 15)
-          .map((topic: any, i: number) => (
-            <div key={i} className="space-y-1">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-medium truncate flex-1 mr-2">{topic.topic}</span>
-                <span className="text-gray-400 shrink-0">
-                  {topic.count}x · {topic.percentage?.toFixed(0)}%
-                </span>
-              </div>
-              <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                <div
-                  className={cn(
-                    'h-2 rounded-full transition-all',
-                    i === 0 ? 'bg-indigo-600' :
-                    i < 3 ? 'bg-indigo-400' :
-                    i < 7 ? 'bg-violet-400' : 'bg-gray-300'
-                  )}
-                  style={{ width: `${(topic.count / maxCount) * 100}%` }}
-                />
-              </div>
-              {topic.years?.length > 0 && (
-                <p className="text-[10px] text-gray-400">
-                  Appeared in: {topic.years.sort().join(', ')}
-                </p>
-              )}
+      <Surface className="space-y-3 p-4">
+        <h3 className="flex items-center gap-2 text-sm font-bold"><BarChart3 size={16} className="text-biro" /> Topic frequency</h3>
+        {sorted.slice(0, 15).map((topic: any, i: number) => (
+          <div key={i} className="space-y-1">
+            <div className="flex items-baseline justify-between gap-2 text-sm">
+              <span className="min-w-0 flex-1 truncate font-medium">{topic.topic}</span>
+              <span className="shrink-0 text-xs text-muted">{topic.count}× · {topic.percentage?.toFixed(0)}%</span>
             </div>
-          ))}
-      </div>
+            <div className="h-2 overflow-hidden rounded-full bg-rule">
+              <div className={cn('h-2 rounded-full', i === 0 ? 'bg-biro' : i < 3 ? 'bg-biro/70' : i < 7 ? 'bg-biro/45' : 'bg-muted/40')} style={{ width: `${(topic.count / maxCount) * 100}%` }} />
+            </div>
+            {topic.years?.length > 0 && <p className="text-xs text-muted">Appeared in: {[...topic.years].sort().join(', ')}</p>}
+          </div>
+        ))}
+      </Surface>
 
-      {/* Exam predictions */}
       {course.predicted_topics?.length > 0 && (
-        <div className="bg-white rounded-3xl p-5 space-y-3">
-          <h3 className="font-bold text-sm flex items-center gap-2">
-            <TrendingUp size={16} className="text-emerald-600" /> Exam Predictions
-          </h3>
-          <p className="text-xs text-gray-400">
-            Topics overdue based on historical patterns — likely to appear soon
-          </p>
+        <Surface className="space-y-3 p-4">
+          <h3 className="flex items-center gap-2 text-sm font-bold"><TrendingUp size={16} className="text-tick" /> Likely to come up</h3>
+          <p className="text-xs text-muted">Topics that look overdue, based on how often they have appeared</p>
           {course.predicted_topics.map((pred: any, i: number) => (
-            <div key={i} className={cn(
-              'p-3 rounded-2xl flex items-start gap-3',
-              pred.confidence === 'high' ? 'bg-emerald-50' :
-              pred.confidence === 'medium' ? 'bg-amber-50' : 'bg-gray-50'
-            )}>
-              <div className={cn(
-                'w-2 h-2 rounded-full mt-1.5 shrink-0',
-                pred.confidence === 'high' ? 'bg-emerald-500' :
-                pred.confidence === 'medium' ? 'bg-amber-500' : 'bg-gray-400'
-              )} />
-              <div>
-                <p className="font-semibold text-sm">{pred.topic}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{pred.reason}</p>
-                <span className={cn(
-                  'text-[10px] font-bold px-2 py-0.5 rounded-full mt-1 inline-block',
-                  pred.confidence === 'high' ? 'bg-emerald-100 text-emerald-700' :
-                  pred.confidence === 'medium' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-600'
-                )}>
-                  {pred.confidence} confidence
-                </span>
+            <div key={i} className={cn('flex items-start gap-3 rounded-xl p-3', pred.confidence === 'high' ? 'bg-tick-wash' : pred.confidence === 'medium' ? 'bg-marker-wash' : 'bg-chalk')}>
+              <span className={cn('mt-1.5 h-2 w-2 shrink-0 rounded-full', pred.confidence === 'high' ? 'bg-tick' : pred.confidence === 'medium' ? 'bg-marker' : 'bg-muted')} />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold leading-snug">{pred.topic}</p>
+                {pred.reason && <p className="mt-0.5 text-xs text-muted">{pred.reason}</p>}
+                <Chip tone={pred.confidence === 'high' ? 'tick' : pred.confidence === 'medium' ? 'marker' : 'neutral'} className="mt-1.5">{pred.confidence} confidence</Chip>
               </div>
             </div>
           ))}
-        </div>
+        </Surface>
       )}
 
-      <div className="bg-amber-50 rounded-3xl p-4 flex items-start gap-3">
-        <AlertTriangle size={15} className="text-amber-600 mt-0.5 shrink-0" />
-        <p className="text-xs text-amber-700">
-          These predictions are based on historical exam patterns and should guide — not replace — thorough study of all topics.
-        </p>
+      <div className="flex items-start gap-2.5 rounded-xl bg-marker-wash p-3.5">
+        <TriangleAlert size={16} className="mt-0.5 shrink-0 text-ink" />
+        <p className="text-xs leading-relaxed text-ink/80">These patterns should guide your study, not replace covering every topic.</p>
       </div>
     </div>
   );
