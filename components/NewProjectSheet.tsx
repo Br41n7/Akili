@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { FileText, Paperclip, X } from 'lucide-react';
+import { FileText, Link2, Paperclip, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import { createProjectSchema, type EducationLevel, type ProjectRecord } from '@/lib/project-context';
@@ -20,14 +20,11 @@ const LEVELS: { value: EducationLevel; label: string }[] = [
   { value: 'secondary', label: 'Secondary / O-Level' },
 ];
 
-/**
- * Creating a project needs a name and (optionally) a course. Files are optional here
- * and can always be added later from the project's Materials tab.
- */
 export default function NewProjectSheet({ open, onClose, onCreated }: Props) {
   const [level, setLevel] = useState<EducationLevel>('university');
   const [name, setName] = useState('');
   const [course, setCourse] = useState('');
+  const [importUrl, setImportUrl] = useState('');
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState('');
   const [nameError, setNameError] = useState('');
@@ -38,7 +35,7 @@ export default function NewProjectSheet({ open, onClose, onCreated }: Props) {
 
   useEffect(() => {
     if (!open) return;
-    setLevel('university'); setName(''); setCourse(''); setFiles([]);
+    setLevel('university'); setName(''); setCourse(''); setImportUrl(''); setFiles([]);
     setFileError(''); setNameError(''); setServerError(''); setProgress('');
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !submitting) onClose(); };
     document.addEventListener('keydown', onKey);
@@ -88,10 +85,34 @@ export default function NewProjectSheet({ open, onClose, onCreated }: Props) {
       return;
     }
 
-    // The project exists now. A failed upload must never undo that, so failures are reported and skipped.
+    const { data: { user } } = await supabase.auth.getUser();
     const failed: string[] = [];
+
+    // Optional URL import during project creation
+    if (importUrl.trim() && project.id && user) {
+      setProgress('Importing link…');
+      try {
+        const res = await fetch('/api/documents/import-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url: importUrl.trim(), project_id: project.id })
+        });
+        const data = await res.json().catch(() => null);
+        if (!res.ok || !data) throw new Error(data?.error || 'Could not import provided URL.');
+        await supabase.from('documents').insert({
+          project_id: project.id,
+          user_id: user.id,
+          name: data.title,
+          content: data.content,
+          source_type: data.source_type
+        });
+      } catch (err) {
+        failed.push(`URL Import: ${errorMessage(err, 'Import failed')}`);
+      }
+    }
+
+    // Upload files
     if (files.length > 0 && project.id) {
-      const { data: { user } } = await supabase.auth.getUser();
       for (let i = 0; i < files.length; i++) {
         setProgress(`Uploading ${i + 1} of ${files.length}…`);
         try {
@@ -104,13 +125,14 @@ export default function NewProjectSheet({ open, onClose, onCreated }: Props) {
     }
 
     if (failed.length > 0) {
-      toast.error(`Project created. ${failed.length === 1 ? 'One file' : `${failed.length} files`} did not upload, so add ${failed.length === 1 ? 'it' : 'them'} from Materials. ${failed[0]}`, { duration: 7000 });
+      toast.error(`Project created with warnings: ${failed.join('; ')}`, { duration: 7000 });
     }
     setSubmitting(false);
     onCreated(project);
   };
 
-  const submitLabel = files.length > 0 ? `Create and upload ${files.length} ${files.length === 1 ? 'file' : 'files'}` : 'Create project';
+  const totalItems = files.length + (importUrl.trim() ? 1 : 0);
+  const submitLabel = totalItems > 0 ? `Create project and add ${totalItems} material${totalItems === 1 ? '' : 's'}` : 'Create project';
 
   return (
     <div className="fixed inset-0 z-[70] flex items-end justify-center bg-ink/50 animate-fade sm:items-center" onClick={() => !submitting && onClose()}>
@@ -155,16 +177,31 @@ export default function NewProjectSheet({ open, onClose, onCreated }: Props) {
               />
             </Field>
 
-            <div className="space-y-2">
+            <div className="space-y-3">
               <div className="flex items-baseline justify-between">
                 <p className="text-sm font-semibold">Study materials</p>
                 <span className="text-xs text-muted">Optional</span>
               </div>
-              <input ref={fileRef} type="file" multiple accept={ACCEPTED_TYPES} onChange={addFiles} className="sr-only" aria-label="Choose PDF or TXT files" />
+
+              <input ref={fileRef} type="file" multiple accept={ACCEPTED_TYPES} onChange={addFiles} className="sr-only" aria-label="Choose PDF, Word, PPT, Image, or TXT files" />
               <Button type="button" variant="quiet" block disabled={submitting || files.length >= MAX_FILES_AT_CREATION} onClick={() => fileRef.current?.click()} className="min-h-16 flex-col gap-0.5 border-2 border-dashed">
-                <span className="inline-flex items-center gap-2"><Paperclip size={17} /> {files.length > 0 ? 'Add more files' : 'Choose PDF or TXT files'}</span>
-                <span className="text-xs font-normal text-muted">Up to 2MB each. You can also add materials after creating the project.</span>
+                <span className="inline-flex items-center gap-2"><Paperclip size={17} /> {files.length > 0 ? 'Add more files' : 'Choose files (PDF, Word, PPT, Image, TXT)'}</span>
+                <span className="text-xs font-normal text-muted">Up to 10MB each. You can also add materials after creating the project.</span>
               </Button>
+
+              <Field label="Or import Google file / Web URL" htmlFor="np-url" optional>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <TextInput
+                      id="np-url"
+                      value={importUrl}
+                      onChange={e => setImportUrl(e.target.value)}
+                      placeholder="Paste Google Docs, Google Slides, or website link"
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+              </Field>
 
               {files.length > 0 && (
                 <ul className="space-y-1.5">

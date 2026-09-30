@@ -111,14 +111,14 @@ export default function Materials({ projectId, userId }: Props) {
       {tab === 'docs' && status !== 'error' && (
         <div className="space-y-3">
           <Surface className="space-y-3 p-4">
-            <input ref={fileRef} type="file" multiple accept={ACCEPTED_TYPES} onChange={uploadFile} className="sr-only" aria-label="Choose PDF or TXT files" />
+            <input ref={fileRef} type="file" multiple accept={ACCEPTED_TYPES} onChange={uploadFile} className="sr-only" aria-label="Choose PDF, Word, PPT, Image, or TXT files" />
             <Button variant="quiet" block loading={uploading} onClick={() => fileRef.current?.click()} className="min-h-24 flex-col gap-1.5 border-2 border-dashed">
               <Upload size={22} />
-              <span>{uploading ? 'Processing…' : 'Upload PDF or TXT files'}</span>
-              <span className="text-xs font-normal text-muted">Max 2MB per file</span>
+              <span>{uploading ? 'Processing…' : 'Upload PDF, Word, PPT, Image, or TXT files'}</span>
+              <span className="text-xs font-normal text-muted">Max 10MB per file</span>
             </Button>
             <div className="flex gap-2">
-              <TextInput value={importUrl} onChange={e => setImportUrl(e.target.value)} placeholder="Paste a Google Docs or webpage link" onKeyDown={e => e.key === 'Enter' && importFromUrl()} />
+              <TextInput value={importUrl} onChange={e => setImportUrl(e.target.value)} placeholder="Paste a Google Docs, Google Slides, or webpage link" onKeyDown={e => e.key === 'Enter' && importFromUrl()} />
               <Button loading={importing} disabled={!importUrl.trim()} onClick={importFromUrl}><Link2 size={16} /> Import</Button>
             </div>
           </Surface>
