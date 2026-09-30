@@ -5,8 +5,8 @@
  *  - "university": a course (or self-study topic) at a university/college, or
  *  - "secondary": a Secondary / O-Level subject, usually tied to an exam board.
  *
- * The two levels collect different fields. Subject is required only where it
- * makes sense (secondary); university projects describe a course instead.
+ * Creating a project only needs a name. The course/subject and the other details
+ * are optional, and study materials can be added at any time.
  */
 import { z } from 'zod';
 
@@ -101,8 +101,8 @@ const baseShape = {
 export const secondaryProjectSchema = z.object({
   ...baseShape,
   education_level: z.literal('secondary'),
-  subject: text(60).min(1, 'Choose a subject'),
-  exam_board: z.enum(['WAEC', 'NECO', 'JAMB', 'GCE', 'IGCSE', 'KCSE', 'SCHOOL'], { errorMap: () => ({ message: 'Choose an exam' }) }),
+  subject: optionalText(80), // the subject, optional: the project name is used when it is empty
+  exam_board: z.enum(['WAEC', 'NECO', 'JAMB', 'GCE', 'IGCSE', 'KCSE', 'SCHOOL']).optional(),
   class_level: optionalText(40),
 });
 
@@ -132,9 +132,9 @@ export function toProjectRow(input: CreateProjectInput, userId: string): Record<
   if (input.education_level === 'secondary') {
     return {
       ...common,
-      subject: input.subject,
-      exam_board: input.exam_board,
-      exam_type: input.exam_board, // kept in sync for older code and PastQ imports
+      subject: input.subject ?? null,
+      exam_board: input.exam_board ?? 'SCHOOL',
+      exam_type: input.exam_board ?? 'SCHOOL', // kept in sync for older code and PastQ imports
       class_level: input.class_level ?? null,
     };
   }

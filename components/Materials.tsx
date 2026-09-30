@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { FileText, Link2, Plus, StickyNote, Trash2, Upload, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { errorMessage } from '@/lib/utils';
+import { ACCEPTED_TYPES, uploadDocument } from '@/lib/upload-document';
 import { Button, ConfirmDialog, EmptyState, ErrorState, ListSkeleton, Segmented, Surface, TextArea, TextInput, IconButton } from '@/components/ui';
 
 interface Props { projectId: string; userId: string }
@@ -35,35 +36,22 @@ export default function Materials({ projectId, userId }: Props) {
   useEffect(load, [projectId, userId]);
 
   const uploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('That file is too large. The limit is 2MB per file.');
-      if (fileRef.current) fileRef.current.value = '';
-      return;
-    }
+    const files = Array.from(e.target.files || []);
+    if (fileRef.current) fileRef.current.value = '';
+    if (files.length === 0) return;
     setUploading(true);
-    try {
-      const form = new FormData();
-      form.append('file', file);
-      form.append('project_id', projectId);
-      const res = await fetch('/api/documents/upload', { method: 'POST', body: form });
-      const data = await res.json().catch(() => null);
-      if (!res.ok || !data) throw new Error(data?.error || 'That file could not be processed.');
-
-      const { data: doc, error } = await supabase.from('documents')
-        .insert({ project_id: projectId, user_id: userId, name: data.name || file.name, content: data.content, chunks: data.chunks, source_type: 'upload' })
-        .select().single();
-      if (error || !doc) throw new Error('The file was read but could not be saved. Please try again.');
-
-      setDocs(p => [doc, ...p]);
-      toast.success('Document uploaded');
-    } catch (err) {
-      toast.error(errorMessage(err, 'Upload failed. Please try again.'));
-    } finally {
-      setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
+    let added = 0;
+    for (const file of files) {
+      try {
+        const doc = await uploadDocument(file, projectId, userId);
+        setDocs(p => [doc, ...p]);
+        added++;
+      } catch (err) {
+        toast.error(errorMessage(err, `${file.name} could not be uploaded.`));
+      }
     }
+    if (added > 0) toast.success(added === 1 ? 'Document uploaded' : `${added} documents uploaded`);
+    setUploading(false);
   };
 
   const importFromUrl = async () => {
@@ -123,10 +111,10 @@ export default function Materials({ projectId, userId }: Props) {
       {tab === 'docs' && status !== 'error' && (
         <div className="space-y-3">
           <Surface className="space-y-3 p-4">
-            <input ref={fileRef} type="file" accept=".pdf,.txt" onChange={uploadFile} className="sr-only" />
+            <input ref={fileRef} type="file" multiple accept={ACCEPTED_TYPES} onChange={uploadFile} className="sr-only" aria-label="Choose PDF or TXT files" />
             <Button variant="quiet" block loading={uploading} onClick={() => fileRef.current?.click()} className="min-h-24 flex-col gap-1.5 border-2 border-dashed">
               <Upload size={22} />
-              <span>{uploading ? 'Processing…' : 'Upload a PDF or TXT file'}</span>
+              <span>{uploading ? 'Processing…' : 'Upload PDF or TXT files'}</span>
               <span className="text-xs font-normal text-muted">Max 2MB per file</span>
             </Button>
             <div className="flex gap-2">
