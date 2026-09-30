@@ -1,14 +1,17 @@
 import { supabase } from '@/lib/supabase';
 
-export const MAX_FILE_BYTES = 2 * 1024 * 1024;
-export const ACCEPTED_TYPES = '.pdf,.txt';
+export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+export const ALLOWED_EXTENSIONS = ['pdf', 'txt', 'docx', 'doc', 'pptx', 'ppt', 'png', 'jpg', 'jpeg', 'webp'];
+export const ACCEPTED_TYPES = '.pdf,.txt,.docx,.doc,.pptx,.ppt,.png,.jpg,.jpeg,.webp';
 
 /** Returns a message the learner can act on, or null when the file is fine. */
 export function checkFile(file: File): string | null {
   const ext = file.name.split('.').pop()?.toLowerCase();
-  if (!['pdf', 'txt'].includes(ext || '')) return `${file.name} is not a PDF or TXT file.`;
+  if (!ALLOWED_EXTENSIONS.includes(ext || '')) {
+    return `${file.name} is not a supported file type (PDF, Word, PowerPoint, TXT, or Image).`;
+  }
   if (file.size === 0) return `${file.name} is empty.`;
-  if (file.size > MAX_FILE_BYTES) return `${file.name} is larger than 2MB.`;
+  if (file.size > MAX_FILE_BYTES) return `${file.name} is larger than 10MB.`;
   return null;
 }
 

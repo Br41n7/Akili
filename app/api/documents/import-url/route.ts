@@ -26,10 +26,26 @@ export async function POST(req: NextRequest) {
       }
       text = await res.text();
       if (text.includes('<!DOCTYPE html>')) {
-        return NextResponse.json({ error: 'Google Doc is not publicly accessible.' }, { status: 422 });
+        return NextResponse.json({ error: 'Google Doc is not publicly accessible. Set sharing permissions to "Anyone with the link can view".' }, { status: 422 });
       }
       title = `Google Doc (${docId.slice(0, 8)}...)`;
       source_type = 'gdoc';
+    } else if (url.includes('docs.google.com/presentation/d/')) {
+      const presId = url.match(/\/d\/([a-zA-Z0-9-_]+)/)?.[1];
+      if (!presId) return NextResponse.json({ error: 'Invalid Google Slides URL' }, { status: 400 });
+
+      const res = await fetch(`https://docs.google.com/presentation/d/${presId}/export/txt`);
+      if (!res.ok) {
+        return NextResponse.json({
+          error: 'Could not access Google Slides presentation. Make sure sharing is set to "Anyone with the link can view".'
+        }, { status: 422 });
+      }
+      text = await res.text();
+      if (text.includes('<!DOCTYPE html>')) {
+        return NextResponse.json({ error: 'Google Slides is not publicly accessible. Set sharing permissions to "Anyone with the link can view".' }, { status: 422 });
+      }
+      title = `Google Slides (${presId.slice(0, 8)}...)`;
+      source_type = 'gslides';
     } else {
       const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
       if (!res.ok) return NextResponse.json({ error: `Failed to fetch URL: ${res.status}` }, { status: 422 });
@@ -47,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     text = text.replace(/[ \t]+/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
 
-    if (!text || text.length < 50) {
+    if (!text || text.length < 30) {
       return NextResponse.json({ error: 'Not enough readable text found on this page.' }, { status: 422 });
     }
 
