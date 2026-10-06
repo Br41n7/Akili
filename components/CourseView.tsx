@@ -1,8 +1,10 @@
 'use client';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { callAIJSON, cn, errorMessage } from '@/lib/utils';
 import { recordEvidence } from '@/lib/adaptive';
+import LessonVisual from '@/components/visual/LessonVisual';
+import { withLessonVisual, type StoredVisual } from '@/lib/visual/lesson';
 import { levelOf, studySubjectText, type ProjectRecord } from '@/lib/project-context';
 import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, Circle, GraduationCap, KeyRound, RefreshCw, Sparkles, TriangleAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -36,6 +38,8 @@ export default function CourseView({ projectId, userId, region, persona, userGro
   const [activeId, setActiveId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [checked, setChecked] = useState(false);
+  const courseRef = useRef<any>(null);
+  courseRef.current = course;
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -122,6 +126,15 @@ Return JSON:
     }
   };
 
+  // Visuals are cached inside the lesson JSON (no schema change). A failed save only means we plan the diagram again next time.
+  const saveLessonVisual = async (lessonId: string, visual: StoredVisual) => {
+    const current = courseRef.current;
+    if (!current) return;
+    const modules = withLessonVisual(current.modules, lessonId, visual);
+    setCourse((c: any) => (c ? { ...c, modules } : c));
+    await supabase.from('courses').update({ modules }).eq('id', current.id).eq('user_id', userId);
+  };
+
   const openLesson = (id: string) => { setActiveId(id); setAnswers({}); setChecked(false); window.scrollTo({ top: 0 }); };
 
   const markComplete = async (lessonId: string) => {
@@ -204,6 +217,11 @@ Return JSON:
         </div>
 
         <Prose>{active.content}</Prose>
+
+        <LessonVisual
+          lesson={active} projectId={projectId} userId={userId} region={region} persona={persona} userGroqKey={userGroqKey}
+          level={project ? levelOf(project) : undefined} onPersist={saveLessonVisual}
+        />
 
         {active.key_concepts?.length > 0 && (
           <Surface className="border-marker bg-marker-wash p-4">
