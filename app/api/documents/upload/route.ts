@@ -8,6 +8,16 @@ export const maxDuration = 30;
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = ['pdf', 'txt', 'docx', 'doc', 'pptx', 'ppt', 'png', 'jpg', 'jpeg', 'webp'];
+const MIME_BY_EXT: Record<string, string[]> = {
+  pdf: ['application/pdf'],
+  txt: ['text/plain'],
+  docx: ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  pptx: ['application/vnd.openxmlformats-officedocument.presentationml.presentation'],
+  png: ['image/png'],
+  jpg: ['image/jpeg'],
+  jpeg: ['image/jpeg'],
+  webp: ['image/webp'],
+};
 
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
 
@@ -82,10 +92,30 @@ export async function POST(req: NextRequest) {
     }
 
     const buffer = Buffer.from(await file.arrayBuffer());
+
+    // Browser MIME values are useful hints, but the server also checks file signatures
+    // for the binary formats we parse so a renamed file cannot reach a parser blindly.
+    if (ext === 'pdf' && buffer.subarray(0, 5).toString('latin1') !== '%PDF-') {
+      return fail('That file is not a valid PDF.', 422);
+    }
+    if (ext === 'png' && !buffer.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) {
+      return fail('That image is not a valid PNG file.', 422);
+    }
+    if ((ext === 'jpg' || ext === 'jpeg') && !(buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[buffer.length - 2] === 0xff && buffer[buffer.length - 1] === 0xd9)) {
+      return fail('That image is not a valid JPEG file.', 422);
+    }
+    if (['docx', 'pptx'].includes(ext) && buffer.subarray(0, 2).toString('latin1') !== 'PK') {
+      return fail(`That ${ext.toUpperCase()} file does not look like a valid Office document. Try saving it again and re-uploading it.`, 422);
+    }
+
+    const declaredMimes = MIME_BY_EXT[ext];
+    if (declaredMimes && file.type && !declaredMimes.includes(file.type)) {
+      console.warn(`[upload] MIME mismatch: ${file.name} reported ${file.type}, expected ${declaredMimes.join(', ')}`);
+    }
+
     let text = '';
 
     if (ext === 'pdf') {
-      if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') return fail('That file is not a valid PDF.', 422);
       try {
         const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default;
         const parsed = await pdfParse(buffer);

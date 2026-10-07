@@ -10,6 +10,8 @@ export function checkFile(file: File): string | null {
   if (!ALLOWED_EXTENSIONS.includes(ext || '')) {
     return `${file.name} is not a supported file type (PDF, Word, PowerPoint, TXT, or Image).`;
   }
+  if (ext === 'ppt') return `${file.name} is an older PowerPoint (.ppt) file. Akili accepts .pptx or PDF — open it in PowerPoint/Google Slides/LibreOffice, save/export it as .pptx or PDF, then upload again.`;
+  if (ext === 'doc') return `${file.name} is an older Word (.doc) file. Akili accepts .docx or PDF — convert it and upload again.`;
   if (file.size === 0) return `${file.name} is empty.`;
   if (file.size > MAX_FILE_BYTES) return `${file.name} is larger than 10MB.`;
   return null;

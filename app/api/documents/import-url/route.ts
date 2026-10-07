@@ -1,5 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
+import { YoutubeTranscript } from 'youtube-transcript';
+
+
+function extractYouTubeId(value: string): string | null {
+  try {
+    const u = new URL(value);
+    if (u.hostname === 'youtu.be') return u.pathname.slice(1).split('/')[0] || null;
+    if (u.hostname === 'youtube.com' || u.hostname === 'www.youtube.com' || u.hostname === 'm.youtube.com') {
+      if (u.pathname === '/watch') return u.searchParams.get('v');
+      const match = u.pathname.match(/^\/(?:shorts|embed|live)\/([^/?]+)/);
+      return match?.[1] || null;
+    }
+  } catch { /* handled by caller */ }
+  return null;
+}
+
+function isYouTubeUrl(value: string) {
+  try {
+    const host = new URL(value).hostname.toLowerCase();
+    return host === 'youtu.be' || host === 'youtube.com' || host === 'www.youtube.com' || host === 'm.youtube.com';
+  } catch { return false; }
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -46,16 +68,34 @@ export async function POST(req: NextRequest) {
       }
       title = `Google Slides (${presId.slice(0, 8)}...)`;
       source_type = 'gslides';
+    } else if (isYouTubeUrl(url)) {
+      const videoId = extractYouTubeId(url);
+      if (!videoId) return NextResponse.json({ error: 'That YouTube link is not valid.' }, { status: 400 });
+
+      try {
+        const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+        text = transcript.map((item: { text: string }) => item.text).join(' ');
+        title = `YouTube lesson (${videoId})`;
+        source_type = 'youtube';
+      } catch (err: any) {
+        console.error('[import-url] youtube transcript failed:', err?.message);
+        return NextResponse.json({
+          error: 'Akili found the YouTube video, but could not access a usable transcript. Try another educational video or upload the notes/slides instead.'
+        }, { status: 422 });
+      }
     } else {
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } });
-      if (!res.ok) return NextResponse.json({ error: `Failed to fetch URL: ${res.status}` }, { status: 422 });
+      let parsedUrl: URL;
+      try { parsedUrl = new URL(url); } catch { return NextResponse.json({ error: 'Enter a valid http or https link.' }, { status: 400 }); }
+      if (!['http:', 'https:'].includes(parsedUrl.protocol)) return NextResponse.json({ error: 'Only http and https links are supported.' }, { status: 400 });
+
+      const res = await fetch(parsedUrl.toString(), { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; Akili/1.0)' } });
+      if (!res.ok) return NextResponse.json({ error: `Akili could not read that page (HTTP ${res.status}).` }, { status: 422 });
       const html = await res.text();
       const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
       if (titleMatch) title = titleMatch[1].trim();
-      // Strip HTML tags
       text = html
-        .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, ' ')
-        .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, ' ')
+        .replace(/<script\b[^<]*(?:(?!<\/script>)[^<]*)*<\/script>/gi, ' ')
+        .replace(/<style\b[^<]*(?:(?!<\/style>)[^<]*)*<\/style>/gi, ' ')
         .replace(/<[^>]+>/g, ' ')
         .replace(/\s{2,}/g, ' ')
         .trim();

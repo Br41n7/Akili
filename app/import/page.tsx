@@ -36,7 +36,7 @@ function ImportContent() {
       if (!bankId) {
         if (!cancelled) {
           setStatus('error');
-          setError('No question bank specified');
+          setError('No PastQ question bank was provided. Open PastQ, choose a question bank, then use its Import to Akili action.');
         }
         return;
       }
