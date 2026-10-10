@@ -6,6 +6,7 @@
  * could not render. Rejected output triggers a regeneration in `runAIJSON`.
  */
 import type { Validation } from '@/lib/ai';
+import { validateVisualDecision } from '@/lib/visual/schema';
 
 type Obj = Record<string, any>;
 
@@ -180,6 +181,14 @@ const visualQuestion = (data: unknown): Validation<Obj> => {
   return ok({ ...data, diagram: { ...data.diagram, labels }, ...q });
 };
 
+const visualExplain = (data: unknown): Validation<Obj> => {
+  if (!isObj(data) || str(data.summary).length < 10) return fail('expected { summary, parts: [{ id, text }] }');
+  const parts = (Array.isArray(data.parts) ? data.parts : [])
+    .filter((p: unknown) => isObj(p) && str((p as Obj).id) && str((p as Obj).text))
+    .map((p: Obj) => ({ id: str(p.id), text: str(p.text) }));
+  return ok({ summary: str(data.summary), parts });
+};
+
 const fact = (data: unknown): Validation<Obj> => {
   if (!isObj(data) || !str(data.fact)) return fail('expected { type, title, fact }');
   return ok({ type: str(data.type), title: str(data.title), fact: str(data.fact) });
@@ -222,6 +231,8 @@ const VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
   quick_check: questionSet(1, 'q'),
   flashcard,
   visual_question: visualQuestion,
+  visual_spec: validateVisualDecision,
+  visual_explain: visualExplain,
   fact,
   research_edit: researchEdit,
   quiz_analysis: quizAnalysis,

@@ -134,7 +134,7 @@ const envNumber = (name: string, fallback: number) => {
 /** Short, cheap tasks. Ask the model to think less. */
 const LOW_EFFORT_TASKS = new Set([
   'adaptive_tutor', 'mnemonic', 'shortcut', 'fact', 'research_editor',
-  'adaptive_analysis', 'topic_analysis', 'confusion', 'exam_analysis',
+  'adaptive_analysis', 'topic_analysis', 'confusion', 'exam_analysis', 'visual_explain',
 ]);
 /** Bulk generation tasks: prefer Groq first to spare Gemini quota. */
 const GROQ_FIRST_TASKS = new Set(['course_builder', 'study_guide', 'slide_deck', 'mnemonic', 'shortcut']);

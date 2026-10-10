@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { BookOpen, ChevronRight, ExternalLink, LogOut, Plus, Trash2 } from 'lucide-react';
+import { BookOpen, ChevronRight, LogOut, Plus, Trash2, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import NewProjectSheet from '@/components/NewProjectSheet';
 import { Button, Chip, ConfirmDialog, EmptyState, ErrorState, IconButton, ListSkeleton, Surface, Wordmark } from '@/components/ui';
@@ -118,11 +118,11 @@ export default function ProjectsPage() {
           <Surface className="flex flex-col gap-3 border-tick/30 bg-tick-wash p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-bold text-ink">Bought a question bank on PastQ?</p>
-              <p className="text-sm text-ink/70">PastQ question banks are separate from your study materials. Open PastQ to choose a bank, then use its <strong>Import to Akili</strong> action.</p>
+              <p className="text-sm text-ink/70">Import it and Akili builds a course and topic analysis from the past questions.</p>
             </div>
-            <a href={process.env.NEXT_PUBLIC_PASTQ_URL || 'https://pastq.co'} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-tick px-4 text-sm font-semibold text-white">
-              <ExternalLink size={16} /> Open PastQ
-            </a>
+            <Link href="/import" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-tick px-4 text-sm font-semibold text-white">
+              <Upload size={16} /> Import from PastQ
+            </Link>
           </Surface>
         )}
       </main>

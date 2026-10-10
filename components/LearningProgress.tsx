@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Brain, CheckCircle2, RefreshCw, Target } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { loadDiagramEvidence, type DiagramEvidenceSummary } from '@/lib/visual/adaptive';
 import { Button, EmptyState, ErrorState, Field, ProgressBar, Skeleton, Surface, TextInput } from '@/components/ui';
 
 interface Props { projectId: string; userId: string }
@@ -14,6 +15,7 @@ export default function LearningProgress({ projectId, userId }: Props) {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [context, setContext] = useState({ foods: '', transport: '', objects: '' });
   const [savingContext, setSavingContext] = useState(false);
+  const [diagram, setDiagram] = useState<DiagramEvidenceSummary | null>(null);
 
   const load = async () => {
     setStatus('loading');
@@ -21,6 +23,7 @@ export default function LearningProgress({ projectId, userId }: Props) {
     if (error) { setStatus('error'); return; }
     setConcepts(data || []);
     setStatus('ready');
+    loadDiagramEvidence(projectId, userId).then(setDiagram).catch(() => setDiagram(null));
   };
 
   useEffect(() => {
@@ -96,6 +99,26 @@ export default function LearningProgress({ projectId, userId }: Props) {
           ))}
         </Surface>
       </div>
+
+      {diagram && diagram.total > 0 && (
+        <Surface className="p-4">
+          <p className="mb-1 text-sm font-bold">Diagram practice</p>
+          <p className="text-sm text-muted">{diagram.correct} of {diagram.total} diagram questions correct.</p>
+          {diagram.direction.total > 0 && (
+            <p className="mt-1 text-sm text-muted">Direction words (medial, proximal…): {diagram.direction.correct} of {diagram.direction.total}.</p>
+          )}
+          {diagram.revisit.length > 0 && (
+            <div className="mt-2.5">
+              <p className="text-xs font-bold uppercase tracking-wide text-redpen">Worth another look</p>
+              {diagram.revisit.map(r => (
+                <div key={r.concept} className="flex items-baseline justify-between gap-2 border-b border-rule py-2 last:border-0">
+                  <span className="text-sm font-semibold">{r.concept}</span><span className="shrink-0 text-xs text-muted">{r.correct} of {r.total}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </Surface>
+      )}
 
       <Surface className="space-y-3 p-4">
         <div>

@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase';
 import { callAIJSON, errorMessage } from '@/lib/utils';
 import { compactLearnerContext, getLearnerContext, recordEvidence } from '@/lib/adaptive';
 import { summarizeAssessment } from '@/lib/local-learning';
+import ConceptVisual from '@/components/visual/ConceptVisual';
 import GeneratedDiagram, { type GeneratedDiagramSpec } from '@/components/GeneratedDiagram';
 import { ArrowRight, Brain, ImagePlus, RotateCcw, Sparkles, X } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -328,6 +329,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
               <p className="font-read text-base font-semibold leading-snug">{q.question}</p>
               <p className="text-sm"><span className="font-semibold text-tick">Answer: </span>{q.type === 'fill_gap' ? q.correct_answer : (q.options?.find((o: string) => o.startsWith(`${q.correct_answer})`)) || q.correct_answer)}</p>
               {q.explanation && <p className="text-sm leading-relaxed text-muted">{q.explanation}</p>}
+              <ConceptVisual concept={q.concept || topic || 'this question'} text={`${q.question}\n${q.explanation || ''}`} projectId={projectId} userId={userId} region={region} persona={persona} />
             </Surface>
           ))}
         </section>

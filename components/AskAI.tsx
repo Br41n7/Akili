@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { callAI, callAIJSON, cn, errorMessage } from '@/lib/utils';
+import ConceptVisual from '@/components/visual/ConceptVisual';
 import { compactLearnerContext, getLearnerContext, recordEvidence } from '@/lib/adaptive';
 import { Brain, MessageSquare, Send } from 'lucide-react';
 import { Button, IconButton, OptionRow, Prose, Surface, TextArea, splitOption, type OptionState } from '@/components/ui';
@@ -140,6 +141,9 @@ Return JSON: { "questions": [{ "id": string, "question": string, "options": ["A)
                 <button onClick={() => startQuickCheck(i)} className="ml-1 inline-flex min-h-8 items-center gap-1 text-xs font-semibold text-biro">
                   <Brain size={13} /> Check my understanding
                 </button>
+              )}
+              {msg.role === 'ai' && !msg.failed && (
+                <ConceptVisual compact concept={([...messages.slice(0, i)].reverse().find(m => m.role === 'user')?.text || 'this explanation').slice(0, 80)} text={msg.text} projectId={projectId} userId={userId} region={region} persona={persona} />
               )}
 
               {practiceFor === i && (

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { callAIJSON, cn, errorMessage } from '@/lib/utils';
+import ConceptVisual from '@/components/visual/ConceptVisual';
 import { compactLearnerContext, getLearnerContext, recordEvidence } from '@/lib/adaptive';
 import { Clock, Flag, RotateCcw, ShieldAlert, X } from 'lucide-react';
 import {
@@ -173,6 +174,25 @@ Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_conc
             {analysis.recommendations.map((r: string, i: number) => <p key={i} className="text-sm leading-relaxed text-muted">{r}</p>)}
           </Surface>
         )}
+
+        {(() => {
+          const missed = (exam?.questions || []).filter((eq: any) => answers[eq.id] !== eq.correct_answer);
+          if (!missed.length) return null;
+          const optionsOf = (eq: any) => (eq.type === 'true_false' ? ['A) True', 'B) False'] : eq.options || []);
+          return (
+            <section aria-label="Questions to review" className="space-y-3">
+              <h3 className="text-lg font-bold">Review what you missed</h3>
+              {missed.slice(0, 6).map((eq: any) => (
+                <Surface key={eq.id} className="space-y-2 p-4">
+                  <p className="font-read text-base font-semibold leading-snug">{eq.question}</p>
+                  <p className="text-sm"><span className="font-semibold text-tick">Answer: </span>{optionsOf(eq).find((o: string) => o.startsWith(`${eq.correct_answer})`)) || eq.correct_answer}</p>
+                  {eq.explanation && <p className="text-sm leading-relaxed text-muted">{eq.explanation}</p>}
+                  <ConceptVisual concept={eq.concept || 'this question'} text={`${eq.question}\n${eq.explanation || ''}`} projectId={projectId} userId={userId} region={region} persona={persona} />
+                </Surface>
+              ))}
+            </section>
+          );
+        })()}
 
         <Button block onClick={retake}><RotateCcw size={16} /> Retake exam</Button>
       </div>

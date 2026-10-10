@@ -199,10 +199,11 @@ export default function Home() {
           <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-12 sm:px-6 md:flex-row md:items-center md:justify-between md:py-14">
             <div className="max-w-xl">
               <h2 className="text-2xl font-extrabold leading-tight tracking-tight sm:text-3xl">Bought a question bank on PastQ?</h2>
-              <p className="mt-2 text-base leading-relaxed text-white/85">PastQ is for examination question banks. Choose a bank on PastQ, then use its <strong>Import to Akili</strong> action to bring a purchased bank into your study workspace.</p>
+              <p className="mt-2 text-base leading-relaxed text-white/85">Import it into Akili and get a course plus a breakdown of the topics that repeat most across the years.</p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
-              <a href={PASTQ_URL} target="_blank" rel="noopener noreferrer" className={cn(buttonClasses('dark'))}>Open PastQ</a>
+              <a href={PASTQ_URL} target="_blank" rel="noopener noreferrer" className={cn(buttonClasses('quiet'), 'border-transparent')}>Browse PastQ</a>
+              <Link href="/import" className={cn(buttonClasses('dark'))}>Import to Akili</Link>
             </div>
           </div>
         </section>
