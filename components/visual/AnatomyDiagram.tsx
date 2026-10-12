@@ -2,7 +2,7 @@
 import { useId, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { depthRanks } from '@/lib/visual/depth';
-import { anatomyGrid, edgePoint, gridBoxes, wrapLabel, VIEW_W } from '@/lib/visual/layout';
+import { anatomyGrid, connectorIsObstructed, edgePoint, gridBoxes, wrapLabel, VIEW_W } from '@/lib/visual/layout';
 import { RELATIONS } from '@/lib/visual/vocab';
 import type { VisualRelationship } from '@/lib/visual/schema';
 import { C, SvgText, ZoomFrame, labelFor, type DiagramProps } from './shared';
@@ -53,10 +53,31 @@ export default function AnatomyDiagram({ spec, selectedId, onSelect, highlightId
   const [limit, setLimit] = useState(depth.max);
   const shownLimit = Math.min(limit, depth.max);
 
-  const edges = spec.relationships
+  const candidates = spec.relationships
     .filter(r => RELATIONS[r.relation].kind !== 'spatial' && r.relation !== 'bonded_to' && box.has(r.from) && box.has(r.to))
     .map(r => ({ r, kind: edgeKind(r) }));
+  // A connector that would run behind another structure is not drawn: it would appear to link the wrong pair.
+  const edges = candidates.filter(({ r }) => !connectorIsObstructed(box.get(r.from)!, box.get(r.to)!, boxes));
+  const hiddenCount = candidates.length - edges.length;
   const legend = [...new Set(edges.map(e => e.kind).filter(k => k !== 'link'))];
+
+  const edgeGeo = edges.map(({ r, kind }, i) => {
+    const a = box.get(r.from)!, b = box.get(r.to)!;
+    const st = EDGE_STYLE[kind];
+    // Nerves and arteries run toward the structure they supply; everything else runs from → to.
+    const reversed = kind === 'nerve' || kind === 'artery';
+    const src = reversed ? b : a, dst = reversed ? a : b;
+    const p1 = edgePoint(src, dst.x + dst.w / 2, dst.y + dst.h / 2);
+    const p2 = edgePoint(dst, src.x + src.w / 2, src.y + src.h / 2);
+    const active = selectedId === r.from || selectedId === r.to;
+    const ghost = hasDepth && [r.from, r.to].some(id => (depth.ranks.get(id) ?? 0) > shownLimit);
+    // Origin/insertion badges sit just outside the bone's box, along the line, so they are never clipped.
+    const len = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1;
+    const bp = kind === 'origin' || kind === 'insertion'
+      ? { x: p2.x - ((p2.x - p1.x) / len) * 15, y: p2.y - ((p2.y - p1.y) / len) * 15 }
+      : { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+    return { i, kind, st, p1, p2, bp, active, arrow: kind === 'nerve' || kind === 'artery' || kind === 'acts', opacity: ghost ? 0.2 : active || !selectedId ? 1 : 0.55 };
+  });
 
   return (
     <div className="space-y-2.5">
@@ -86,30 +107,11 @@ export default function AnatomyDiagram({ spec, selectedId, onSelect, highlightId
             {axes.left && <text transform={`translate(10 ${height / 2}) rotate(-90)`} textAnchor="middle" fontSize={11} fontWeight={700} fill={C.muted}>← {cap(axes.left)}</text>}
             {axes.right && <text transform={`translate(${VIEW_W - 10} ${height / 2}) rotate(90)`} textAnchor="middle" fontSize={11} fontWeight={700} fill={C.muted}>{cap(axes.right)} →</text>}
 
-            {edges.map(({ r, kind }, i) => {
-              const a = box.get(r.from)!, b = box.get(r.to)!;
-              const st = EDGE_STYLE[kind];
-              // Nerves and arteries run toward the structure they supply; everything else runs from → to.
-              const reversed = kind === 'nerve' || kind === 'artery';
-              const src = reversed ? b : a, dst = reversed ? a : b;
-              const p1 = edgePoint(src, dst.x + dst.w / 2, dst.y + dst.h / 2);
-              const p2 = edgePoint(dst, src.x + src.w / 2, src.y + src.h / 2);
-              const active = selectedId === r.from || selectedId === r.to;
-              const arrow = kind === 'nerve' || kind === 'artery' || kind === 'acts';
-              const bp = kind === 'origin' || kind === 'insertion' ? p2 : { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-              const ghost = hasDepth && [r.from, r.to].some(id => (depth.ranks.get(id) ?? 0) > shownLimit);
-              return (
-                <g key={i} opacity={ghost ? 0.2 : active || !selectedId ? 1 : 0.55}>
-                  <line x1={p1.x} y1={p1.y} x2={p2.x} y2={p2.y} stroke={st.color} strokeWidth={active ? st.width + 1 : st.width} strokeDasharray={st.dash} strokeLinecap="round" markerEnd={arrow ? `url(#${uid}-${kind})` : undefined} />
-                  {st.badge && (
-                    <g>
-                      <circle cx={bp.x} cy={bp.y} r={9} fill={C.paper} stroke={st.color} strokeWidth={2} />
-                      <SvgText lines={[st.badge]} x={bp.x} y={bp.y} size={10.5} fill={st.color} />
-                    </g>
-                  )}
-                </g>
-              );
-            })}
+            {edgeGeo.map(g => (
+              <g key={g.i} opacity={g.opacity}>
+                <line x1={g.p1.x} y1={g.p1.y} x2={g.p2.x} y2={g.p2.y} stroke={g.st.color} strokeWidth={g.active ? g.st.width + 1 : g.st.width} strokeDasharray={g.st.dash} strokeLinecap="round" markerEnd={g.arrow ? `url(#${uid}-${g.kind})` : undefined} />
+              </g>
+            ))}
 
             {boxes.map(b => {
               const el = spec.elements.find(e => e.id === b.id)!;
@@ -130,9 +132,18 @@ export default function AnatomyDiagram({ spec, selectedId, onSelect, highlightId
                 </g>
               );
             })}
+            {/* Badges are drawn last so no box can cover them. */}
+            {edgeGeo.filter(g => g.st.badge).map(g => (
+              <g key={`b${g.i}`} opacity={g.opacity}>
+                <circle cx={g.bp.x} cy={g.bp.y} r={10} fill={C.paper} stroke={g.st.color} strokeWidth={2} />
+                <SvgText lines={[g.st.badge!]} x={g.bp.x} y={g.bp.y} size={11} fill={g.st.color} />
+              </g>
+            ))}
           </svg>
         )}
       </ZoomFrame>
+
+      {hiddenCount > 0 && <p className="text-xs text-muted">{hiddenCount} connection{hiddenCount === 1 ? '' : 's'} not drawn because {hiddenCount === 1 ? 'it' : 'they'} would pass behind another structure. Tap a structure to read {hiddenCount === 1 ? 'it' : 'them'}.</p>}
 
       {legend.length > 0 && (
         <ul className="flex flex-wrap gap-x-3 gap-y-1 text-xs font-semibold text-muted" aria-label="Key">

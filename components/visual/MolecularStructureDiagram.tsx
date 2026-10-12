@@ -1,6 +1,7 @@
 'use client';
 import { moleculeLayout, wrapLabel, VIEW_W } from '@/lib/visual/layout';
 import { C, SvgText, ZoomFrame, type DiagramProps } from './shared';
+import SkeletalMoleculeDiagram from './SkeletalMoleculeDiagram';
 
 // Conventional element colours, softened to sit with Akili's palette.
 const ELEMENT_FILL: Record<string, string> = { C: '#E5E7EB', H: '#FFFFFF', N: '#DCE3FF', O: '#FBD5D0', S: '#FBEFB0', P: '#FFE0B8' };
@@ -10,7 +11,11 @@ const ELEMENT_FILL: Record<string, string> = { C: '#E5E7EB', H: '#FFFFFF', N: '#
  * and hydrogen bonds are styled so they can be told apart. Geometry is a schematic layout from the spec,
  * not a computed 3D structure.
  */
-export default function MolecularStructureDiagram({ spec, selectedId, onSelect, highlightIds = [], showLabels }: DiagramProps) {
+export default function MolecularStructureDiagram(props: DiagramProps) {
+  return props.spec.display === 'skeletal' ? <SkeletalMoleculeDiagram {...props} /> : <BallDiagram {...props} />;
+}
+
+function BallDiagram({ spec, selectedId, onSelect, highlightIds = [], showLabels }: DiagramProps) {
   const { points, height } = moleculeLayout(spec);
   const pos = new Map(points.map(p => [p.id, p]));
   const el = new Map(spec.elements.map(e => [e.id, e]));

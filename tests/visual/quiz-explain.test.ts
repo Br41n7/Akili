@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { acceptAIExplanation, buildExplanation } from '@/lib/visual/explain';
-import { buildLadder, buildVisualQuestions, resolveTap, type VisualQuestion } from '@/lib/visual/quiz';
+import { buildLadder, buildVisualQuestions, type VisualQuestion } from '@/lib/visual/quiz';
 import { elementMap, safeVisualSpec, type VisualSpec } from '@/lib/visual/schema';
 import { matchWeakConcepts } from '@/lib/visual/adaptive';
 import { RELATIONS, directionOf } from '@/lib/visual/vocab';
@@ -260,6 +260,3 @@ describe('"Tap the structure" questions', () => {
     expect(buildVisualQuestions(spec, { max: 4, seed: '1', allowTap: false }).some(q => q.kind === 'tap')).toBe(false);
   });
 });
-
-
-describe('tap callback contract', () => { it('resolves accepted tap ids', () => { const spec = safeVisualSpec(VALID_FIXTURES.bicepsBrachii)!; const qs = buildVisualQuestions(spec, { max: 20, seed: 'tap-regression', allowTap: true }); const tap = qs.find(q => q.kind === 'tap' && q.tap); expect(tap).toBeTruthy(); if (tap?.tap) expect(resolveTap(tap, tap.tap.accept[0])).toBe(true); }); });

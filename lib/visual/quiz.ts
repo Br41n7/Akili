@@ -6,9 +6,10 @@
  * distractor is checked so it cannot also be a correct answer.
  */
 import { elementMap, orderedElements, spatialVerdict, type VisualElement, type VisualSpec } from './schema';
+import { computeFormula, hill, prettyFormula } from './chem';
 import { DIRECTION_GLOSSARY, DIRECTION_TERMS, OPPOSITE, RELATIONS, RELATION_KEYS, directionOf, type DirectionTerm, type RelationKey } from './vocab';
 
-export type VisualQuestionKind = 'tap' | 'relation' | 'direction' | 'sequence' | 'description' | 'attribute' | 'term' | 'edge';
+export type VisualQuestionKind = 'formula' | 'count' | 'tap' | 'relation' | 'direction' | 'sequence' | 'description' | 'attribute' | 'term' | 'edge';
 
 export interface VisualQuestion {
   id: string;
@@ -162,7 +163,39 @@ function sequenceQuestions(spec: VisualSpec, rand: () => number): VisualQuestion
   return out;
 }
 
+const dupDescription = (spec: VisualSpec, e: VisualElement) => spec.elements.some(o => o.id !== e.id && o.description && e.description && o.description.trim().toLowerCase() === e.description.trim().toLowerCase());
 const words = (s: string) => s.toLowerCase().match(/[a-z]{4,}/g) ?? [];
+
+const ELEMENT_NAME: Record<string, string> = { C: 'carbon', H: 'hydrogen', N: 'nitrogen', O: 'oxygen', P: 'phosphorus', S: 'sulfur' };
+
+/**
+ * Formula and atom-count questions. Only for molecules whose formula the validator derived from the bonds,
+ * so the answer is computed, never recalled. Distractors are nearby formulas/counts that are certainly different.
+ */
+function moleculeQuestions(spec: VisualSpec, rand: () => number): VisualQuestion[] {
+  const f = computeFormula(spec);
+  if (!f) return [];
+  const out: VisualQuestion[] = [];
+  const counts = f.counts;
+
+  const variants = new Set<string>();
+  const bump = (el: string, d: number) => { const c = { ...counts, [el]: (counts[el] ?? 0) + d }; if ((c[el] ?? 0) < 0 || (c[el] === 0 && el === 'C')) return; variants.add(hill(c)); };
+  bump('H', 2); bump('H', -2); bump('C', 1); bump('C', -1);
+  for (const el of Object.keys(counts).filter(k => k !== 'C' && k !== 'H')) { bump(el, 1); bump(el, -1); }
+  variants.delete(f.formula);
+  const q = make({ id: '', kind: 'formula', level: 3, question: `What is the molecular formula of ${spec.topic.replace(/ structure$/, '')}?`, explanation: `Counting every atom, including the hydrogens implied at each corner, gives ${prettyFormula(f.formula)}.`, concept: `molecular formula: ${spec.topic}`, element_ids: [] },
+    prettyFormula(f.formula), [...variants].map(prettyFormula), rand);
+  if (q) out.push(q);
+
+  const heavy = Object.keys(counts).filter(k => k !== 'H' && ELEMENT_NAME[k]);
+  for (const el of heavy.slice(0, 3)) {
+    const n = counts[el];
+    const wrong = [n - 2, n - 1, n + 1, n + 2].filter(x => x >= 1 && x !== n).map(String);
+    const c = make({ id: '', kind: 'count', level: 2, question: `How many ${ELEMENT_NAME[el]} atoms are in ${spec.topic.replace(/ structure$/, '')}?`, explanation: `It has ${n} ${ELEMENT_NAME[el]} atom${n === 1 ? '' : 's'}.`, concept: `atom counts: ${spec.topic}`, element_ids: [] }, String(n), wrong, rand);
+    if (c) out.push(c);
+  }
+  return out;
+}
 
 const TAP_TYPES = new Set(['anatomy', 'anatomy_layers', 'cross_section', 'molecular_structure', 'hierarchy', 'process', 'flowchart', 'cycle', 'timeline', 'mechanism']);
 
@@ -203,7 +236,7 @@ function tapQuestions(spec: VisualSpec, rand: () => number): VisualQuestion[] {
 
   for (const e of spec.elements) {
     const d = e.description;
-    if (!d || words(e.label).some(w => d.toLowerCase().includes(w))) continue;
+    if (!d || dupDescription(spec, e) || words(e.label).some(w => d.toLowerCase().includes(w))) continue;
     push({ id: '', kind: 'tap', level: 2, question: `Tap the ${n} that matches this description: "${d.replace(/\.$/, '')}".`, explanation: `${e.label}: ${d}`, concept: e.label, element_ids: [e.id] }, e, new Set([e.id]), new Set());
   }
   return out;
@@ -243,7 +276,7 @@ function describesQuestions(spec: VisualSpec, rand: () => number): VisualQuestio
   const n = noun(spec);
   for (const e of spec.elements) {
     const d = e.description;
-    if (!d) continue;
+    if (!d || dupDescription(spec, e)) continue;
     // A description that contains the label's own words gives the answer away.
     const hit = words(e.label).some(w => d.toLowerCase().includes(w));
     if (hit) continue;
@@ -305,13 +338,57 @@ export function termQuestions(spec: VisualSpec, rand: () => number, only?: Direc
   return out;
 }
 
+
+
+/** Molecule bookkeeping questions, answered from the derived formula (see chem.ts). */
+function chemQuestions(spec: VisualSpec, rand: () => number): VisualQuestion[] {
+  const f = computeFormula(spec);
+  if (!f || spec.visual_type !== 'molecular_structure') return [];
+  const out: VisualQuestion[] = [];
+  const counts = f.counts;
+
+  // Formula: the true one against nearby, plausible-looking wrong ones (each differs in at least one count).
+  const variants = new Map<string, string>();
+  const tweak = (el: string, d: number) => {
+    const c = { ...counts, [el]: (counts[el] ?? 0) + d };
+    if (c[el] < 1 || (el === 'H' && c[el] < 1)) return;
+    const h = hill(c);
+    if (h !== f.formula) variants.set(h, prettyFormula(h));
+  };
+  tweak('H', 2); tweak('H', -2);
+  for (const el of Object.keys(counts).filter(k => k !== 'H')) { tweak(el, 1); if (counts[el] > 1) tweak(el, -1); }
+  const q = make({
+    id: '', kind: 'formula', level: 3, question: 'What is the molecular formula of this molecule?',
+    explanation: `Counting every atom, including the hydrogens implied by the bonds, gives ${prettyFormula(f.formula)}.`,
+    concept: `molecular formula: ${spec.topic}`, element_ids: [],
+  }, prettyFormula(f.formula), [...variants.values()], rand);
+  if (q) out.push(q);
+
+  // Counts of each element except hydrogen.
+  // Only C, N and O: a count of 1 for P or S is a guess, not a skill.
+  const names: Record<string, string> = { C: 'carbon', N: 'nitrogen', O: 'oxygen' };
+  for (const el of Object.keys(counts).filter(k => k !== 'H' && names[k])) {
+    const n = counts[el];
+    const wrong = [n - 1, n + 1, n + 2, n - 2].filter(x => x >= 1 && x !== n).map(String);
+    const c = make({
+      id: '', kind: 'count', level: 2, question: `How many ${names[el]} atoms does this molecule contain?`,
+      explanation: `There are ${n} ${names[el]} atom${n === 1 ? '' : 's'} in the structure.`,
+      concept: `atom counts: ${spec.topic}`, element_ids: spec.elements.filter(e => e.symbol === el).map(e => e.id),
+    }, String(n), wrong, rand);
+    if (c) out.push(c);
+  }
+  return out;
+}
+
 export interface QuizOptions { max?: number; seed?: string; onlyTerms?: DirectionTerm[]; maxLevel?: 1 | 2 | 3; includeTerms?: boolean; /** default true */ allowTap?: boolean }
 
 export function buildVisualQuestions(spec: VisualSpec, opts: QuizOptions = {}): VisualQuestion[] {
   const rand = rng(`${opts.seed ?? ''}|${spec.topic}|${spec.elements.map(e => e.id).join(',')}`);
   const all = [
     ...(opts.includeTerms || opts.onlyTerms ? termQuestions(spec, rand, opts.onlyTerms) : []),
+    ...moleculeQuestions(spec, rand),
     ...directionQuestions(spec, rand),
+    ...chemQuestions(spec, rand),
     ...(opts.allowTap === false ? [] : tapQuestions(spec, rand)),
     ...relationQuestions(spec, rand),
     ...describesQuestions(spec, rand),

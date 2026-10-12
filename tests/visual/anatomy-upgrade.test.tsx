@@ -175,3 +175,29 @@ describe('touch targets on the upgraded diagrams', () => {
     for (const a of buttons) expect(a, a).toMatch(/min-h-(11|12|14|16)|(?:^|\s)h-1[1-6](?:\s|$)|min-height:\s*(4[4-9]|[5-9]\d)px/);
   });
 });
+
+import { connectorIsObstructed, type Box } from '@/lib/visual/layout';
+
+describe('connectors never link the wrong pair', () => {
+  const b = (id: string, x: number, y: number): Box => ({ id, x, y, w: 100, h: 50 });
+  it('detects a connector that would pass behind another box', () => {
+    const top = b('top', 100, 0), mid = b('mid', 100, 80), bottom = b('bottom', 100, 160);
+    expect(connectorIsObstructed(top, bottom, [top, mid, bottom])).toBe(true);
+    expect(connectorIsObstructed(top, mid, [top, mid, bottom])).toBe(false);
+    expect(connectorIsObstructed(top, bottom, [top, bottom])).toBe(false);
+    expect(connectorIsObstructed(b('l', 0, 0), b('r', 220, 0), [b('l', 0, 0), b('r', 220, 0), b('below', 100, 100)])).toBe(false);
+  });
+  it('the knee leaves the femur-tibia joint out of the drawing and says so', () => {
+    const out = html(F.kneeJoint);
+    expect(out).toMatch(/1 connection not drawn because it would pass behind another structure/);
+    const svg = out.slice(out.indexOf('<svg viewBox="0 0 360 3'), out.indexOf('</svg>', out.indexOf('<svg viewBox="0 0 360 3')));
+    expect((svg.match(/>●</g) || []).length).toBe(1); // only the patellofemoral joint remains in the drawing
+  });
+  it('and the omitted relation is still in the detail data', () => {
+    const f = elementFacts(safeVisualSpec(F.kneeJoint)!, 'femur');
+    expect(f.relations.join(' ')).toContain('Femur articulates with Tibia');
+  });
+  it('diagrams with no obstruction print no such note', () => {
+    expect(html(F.bicepsBrachii)).not.toMatch(/not drawn because/);
+  });
+});

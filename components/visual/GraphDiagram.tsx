@@ -1,8 +1,9 @@
 'use client';
-import { C, type DiagramProps } from './shared';
+import { cn } from '@/lib/utils';
+import { C, nodeClass, type DiagramProps } from './shared';
 
 /** Small line/bar chart drawn from the spec's own data points. Nothing is fetched or computed beyond scaling. */
-export default function GraphDiagram({ spec }: DiagramProps) {
+export default function GraphDiagram({ spec, selectedId, onSelect, highlightIds = [], showLabels }: DiagramProps) {
   const g = spec.graph; if (!g) return null;
   const W = 360, H = 250, L = 44, R = 14, T = 16, B = 52;
   const ys = g.points.map(p => p.y);
@@ -14,6 +15,7 @@ export default function GraphDiagram({ spec }: DiagramProps) {
   const fmt = (n: number) => (Math.abs(n) >= 100 ? n.toFixed(0) : String(Math.round(n * 100) / 100));
 
   return (
+    <div className="space-y-2.5">
     <svg viewBox={`0 0 ${W} ${H}`} className="h-auto w-full rounded-xl border border-rule bg-paper" role="img" aria-label={`${spec.title}: ${g.y_label} against ${g.x_label}`}>
       {[0, 0.5, 1].map(t => { const v = lo + t * (hi - lo); return <g key={t}><line x1={L} x2={W - R} y1={sy(v)} y2={sy(v)} stroke={C.rule} /><text x={L - 6} y={sy(v) + 4} textAnchor="end" fontSize={10.5} fill={C.muted}>{fmt(v)}</text></g>; })}
       {g.kind === 'bar'
@@ -26,5 +28,17 @@ export default function GraphDiagram({ spec }: DiagramProps) {
       <text x={(L + W - R) / 2} y={H - 8} textAnchor="middle" fontSize={11.5} fontWeight={700} fill={C.muted}>{g.x_label}</text>
       <text transform={`translate(11 ${(T + H - B) / 2}) rotate(-90)`} textAnchor="middle" fontSize={11.5} fontWeight={700} fill={C.muted}>{g.y_label}</text>
     </svg>
+    {spec.elements.length > 0 && (
+      <ol className="space-y-1.5" aria-label="Stages">
+        {spec.elements.map((e, i) => (
+          <li key={e.id}>
+            <button type="button" aria-pressed={selectedId === e.id} onClick={() => onSelect(selectedId === e.id ? null : e.id)} className={cn(nodeClass(selectedId === e.id, highlightIds.includes(e.id)), 'min-h-11 py-2')}>
+              <span className="font-bold">{i + 1}. </span>{showLabels ? e.label : '•••'}
+            </button>
+          </li>
+        ))}
+      </ol>
+    )}
+    </div>
   );
 }

@@ -1,9 +1,9 @@
 'use client';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Eye, EyeOff, Lightbulb, Sparkles, X } from 'lucide-react';
 import { Button, Chip, Surface } from '@/components/ui';
 import { buildExplanation, elementFacts, requestAIExplanation, type Explanation, type FactKind } from '@/lib/visual/explain';
-import { applyViewVariant, availableViews, elementMap, safeVisualSpec, type VisualSpec, type VisualType } from '@/lib/visual/schema';
+import { elementMap, safeVisualSpec, type VisualSpec, type VisualType } from '@/lib/visual/schema';
 import { RELATIONS } from '@/lib/visual/vocab';
 import type { VisualQuestion } from '@/lib/visual/quiz';
 import AnatomyDiagram from './AnatomyDiagram';
@@ -40,6 +40,7 @@ const REGISTRY: Record<VisualType, (p: DiagramProps) => React.ReactElement | nul
 };
 
 export const SUPPORTED_VISUAL_TYPES = Object.keys(REGISTRY) as VisualType[];
+const LABEL_TOGGLE_TYPES: VisualType[] = ['anatomy', 'anatomy_layers', 'cross_section', 'molecular_structure', 'hierarchy', 'process'];
 
 export interface VisualAIContext { projectId: string; region: string; persona?: string; userGroqKey?: string }
 export interface VisualRendererProps {
@@ -68,37 +69,18 @@ function Shell({ spec, ai, onAnswer, onSimplify, simplifying }: { spec: VisualSp
   const [struggling, setStruggling] = useState(false);
   // While a "tap the structure" question is open, diagram taps answer it instead of selecting a part.
   const [tapListener, setTapListener] = useState<((id: string) => void) | null>(null);
-  const [activeView, setActiveView] = useState<VisualSpec['view']>(spec.view);
-  const autoRemediation = useRef(false);
-  const remediationTimer = useRef<number | null>(null);
 
-  useEffect(() => {
-    setActiveView(spec.view); setStruggling(false); autoRemediation.current = false;
-    return () => { if (remediationTimer.current !== null) window.clearTimeout(remediationTimer.current); remediationTimer.current = null; };
-  }, [spec]);
-  useEffect(() => { setExplanation(buildExplanation(effectiveSpec)); }, [effectiveSpec]);
+  useEffect(() => { setExplanation(buildExplanation(spec)); }, [spec]);
 
-  const effectiveSpec = useMemo(() => applyViewVariant(spec, activeView), [spec, activeView]);
-  const map = elementMap(effectiveSpec);
-  const interactions = new Set(effectiveSpec.interactions);
-  const canSelect = interactions.has('select');
+  const map = elementMap(spec);
   const selected = selectedId ? map.get(selectedId) : null;
-  const canHideLabels = interactions.has('toggle_labels');
-  const views = availableViews(spec);
-  const render = REGISTRY[effectiveSpec.visual_type];
-  const handleStruggle = () => {
-    setStruggling(true);
-    setPanel('explain');
-    if (!autoRemediation.current && onSimplify && effectiveSpec.difficulty !== 'beginner') {
-      autoRemediation.current = true;
-      remediationTimer.current = window.setTimeout(() => { remediationTimer.current = null; void onSimplify(); }, 1200);
-    }
-  }; 
+  const canHideLabels = LABEL_TOGGLE_TYPES.includes(spec.visual_type);
+  const render = REGISTRY[spec.visual_type];
 
   const reword = async () => {
     if (!ai) return;
     setRewording(true);
-    setExplanation(await requestAIExplanation(effectiveSpec, ai));
+    setExplanation(await requestAIExplanation(spec, ai));
     setRewording(false);
   };
 
@@ -115,15 +97,6 @@ function Shell({ spec, ai, onAnswer, onSimplify, simplifying }: { spec: VisualSp
         <p className="text-sm text-muted">{spec.learning_goal}</p>
       </div>
 
-      {views.length > 1 && (
-        <label className="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-rule bg-paper px-3 text-sm font-semibold">
-          <span>View</span>
-          <select value={activeView ?? ''} onChange={e => setActiveView(e.target.value as VisualSpec['view'])} className="min-h-11 rounded-lg bg-chalk px-2" aria-label="Diagram view">
-            {views.map(v => <option key={v} value={v}>{v}</option>)}
-          </select>
-        </label>
-      )}
-
       {canHideLabels && (
         <button type="button" onClick={() => setShowLabels(v => !v)} aria-pressed={!showLabels} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-rule bg-paper px-3 text-sm font-semibold">
           {showLabels ? <EyeOff size={16} /> : <Eye size={16} />} {showLabels ? 'Hide labels to test yourself' : 'Show labels'}
@@ -131,10 +104,10 @@ function Shell({ spec, ai, onAnswer, onSimplify, simplifying }: { spec: VisualSp
       )}
 
       {tapListener && <p className="rounded-lg bg-biro-wash px-3 py-2 text-center text-sm font-bold text-biro-dark" role="status">Quiz: tap the answer on the diagram</p>}
-      {render({ spec: effectiveSpec, selectedId, onSelect: id => { if (tapListener && id) tapListener(id); else if (canSelect) setSelectedId(id); }, highlightIds, showLabels })}
+      {render({ spec, selectedId, onSelect: id => { if (tapListener && id) tapListener(id); else setSelectedId(id); }, highlightIds, showLabels })}
 
       {selected ? (
-        <DetailPanel spec={effectiveSpec} id={selected.id} onSelect={setSelectedId} onClose={() => setSelectedId(null)} />
+        <DetailPanel spec={spec} id={selected.id} onSelect={setSelectedId} onClose={() => setSelectedId(null)} />
       ) : (
         spec.visual_type !== 'graph' && <p className="text-center text-xs font-semibold text-muted">Tap any part for details</p>
       )}
@@ -162,13 +135,13 @@ function Shell({ spec, ai, onAnswer, onSimplify, simplifying }: { spec: VisualSp
       )}
 
       {panel === 'quiz' && (
-        <VisualQuiz spec={effectiveSpec} onHighlight={setHighlightIds} onAnswer={onAnswer} onTapMode={l => setTapListener(l)} onStruggle={handleStruggle} onClose={() => { setPanel('none'); setHighlightIds([]); }} />
+        <VisualQuiz spec={spec} onHighlight={setHighlightIds} onAnswer={onAnswer} onTapMode={l => setTapListener(l ? () => l : null)} onStruggle={() => setStruggling(true)} onClose={() => { setPanel('none'); setHighlightIds([]); }} />
       )}
 
-      {struggling && onSimplify && effectiveSpec.difficulty !== 'beginner' && (
+      {struggling && onSimplify && spec.difficulty !== 'beginner' && (
         <Button variant="ghost" block loading={simplifying} onClick={onSimplify}>Show me a simpler diagram</Button>
       )}
-      {effectiveSpec.caveat && <p className="text-xs text-muted">{effectiveSpec.caveat}</p>}
+      {spec.caveat && <p className="text-xs text-muted">{spec.caveat}</p>}
     </Surface>
   );
 }

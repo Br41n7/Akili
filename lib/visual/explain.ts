@@ -8,6 +8,7 @@
  */
 import { callAIJSON } from '@/lib/utils';
 import { elementMap, orderedElements, type VisualSpec } from './schema';
+import { implicitHydrogens } from './chem';
 import { describeRelation } from './vocab';
 
 export interface ExplanationPart { id: string; text: string }
@@ -51,6 +52,15 @@ export function elementFacts(spec: VisualSpec, id: string): ElementFacts {
     // origin/insertion recorded on the relationship become facts of the muscle if the attributes don't already say so
     if (r.role && r.from === id && !has(r.role)) facts.push({ name: r.role === 'origin' ? 'Origin' : 'Insertion', value: to.label, kind: r.role });
     relations.push(sentence(`${describeRelation(r.relation, from.label, to.label)}${r.role ? ` (${r.role})` : ''}`));
+  }
+  if (spec.visual_type === 'molecular_structure') {
+    const nb = spec.relationships.filter(r => r.relation === 'bonded_to' && (r.from === id || r.to === id)).map(r => {
+      const o = map.get(r.from === id ? r.to : r.from)?.label ?? '';
+      return r.bond_order === 2 ? `${o} (double bond)` : r.bond_order === 3 ? `${o} (triple bond)` : o;
+    }).filter(Boolean);
+    if (nb.length) facts.push({ name: 'Bonded to', value: nb.join('; '), kind: 'other' });
+    const h = spec.display === 'skeletal' ? implicitHydrogens(spec)?.get(id) : undefined;
+    if (h) facts.push({ name: 'Hydrogens', value: `${h} (implied by its bonds)`, kind: 'other' });
   }
   return { intro, facts, relations };
 }

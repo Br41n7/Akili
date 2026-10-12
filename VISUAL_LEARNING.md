@@ -1,4 +1,4 @@
-# Akili Visual Learning Engine (Phase 1 + Phase 2)
+# Akili Visual Learning Engine (Phases 1-3)
 
 Structured, deterministic diagrams inside lessons. The model returns **JSON only**; Akili's own
 components draw it. Nothing the model writes is ever executed or inserted as HTML.
@@ -44,7 +44,7 @@ Any failure at any step renders nothing; the lesson is unchanged.
   `learning_evidence` rows with `interaction_type = 'diagram_question'`. No new tables.
 
 ## Curated library (`lib/visual/curated.ts`, data in `curated-data.ts`)
-13 built-in diagrams for core topics. A lesson whose **title** matches an alias (whole words) or whose key
+19 built-in diagrams for core topics. A lesson whose **title** matches an alias (whole words) or whose key
 concept equals one uses the built-in spec: no AI request, same content every time. Matching is deliberately
 strict ("Biceps femoris" does not match "biceps brachii").
 - Every entry ships `reviewed: false` and the UI says **"Built-in schematic · awaiting review"**. I wrote
@@ -53,6 +53,24 @@ strict ("Biceps femoris" does not match "biceps brachii").
 - A model can never produce `curated` or `curated_reviewed`; provenance is forced to `ai_generated`.
 - To add one: add the spec to `curated-data.ts`, an entry with unique aliases to `curated.ts` (a test fails on
   duplicate aliases or an invalid spec).
+
+## Phase 3: molecules, formulas, more visuals
+- **Skeletal structures** (`visual_type: molecular_structure`, `display: "skeletal"`): every atom has a `symbol`
+  and fine coordinates `at {x,y}` (0-100, y down). Carbons are tappable corners; heteroatoms are lettered with
+  hydrogens filled in from valence (OH, NH₂, NH₃⁺). Bonds: `bond_order` for double/triple, `bond_style`
+  `wedge` (toward viewer, narrow end at `from`), `dash` (away), `bold` (front edge of a Haworth ring).
+- **Verified formula** (`lib/visual/chem.ts`): the formula is *derived* from the bonds by standard valence and
+  must equal the spec's `formula`, or the spec is rejected. Over-bonded atoms are rejected too. This checks
+  bookkeeping (counts, valences). It cannot tell you the structure is the right molecule.
+- **Formula and atom-count questions** are computed from that derivation, never recalled.
+- **Curated molecules:** β-D-glucose (Haworth), L-alanine, palmitic acid, AMP. Also a gait-cycle timeline
+  (Perry phases and percentages) and a schematic action-potential graph. All `reviewed: false`.
+- Wide molecules (long chains) open pre-zoomed. Connectors that would run behind another structure are not
+  drawn (they would link the wrong pair); the diagram says how many were left out.
+- Known simplifications: adenine uses one Kekulé form; AMP is a flat connectivity drawing (sugar OH
+  stereochemistry not shown); alanine is the neutral form (zwitterion noted in the caveat); glucose is the
+  β-pyranose Haworth form only (no α, no chair).
+- **Not built:** AI-generated illustrations. See the note in the project README section below.
 
 ## Tap the structure
 "Tap the structure that…" questions are generated for tappable diagrams. They are only asked when the set of
@@ -63,6 +81,23 @@ same question as multiple choice.
 ## Zoom
 Pinch with two fingers or use the +/- buttons (100–300%). The frame blocks browser page-zoom so the gesture
 zooms the diagram. Not yet tested on a real device.
+
+## Molecules (Phase 3)
+- `display: "skeletal"` draws rings, sugars, nucleotides and fatty acids: carbons are corners, heteroatoms are lettered
+  with their hydrogens filled in from standard valence (OH, NH₂). Every atom needs `symbol` and `at {x,y}` (0-100,
+  y down). Bonds use `bond_order`; `bond_style` is `wedge` (toward viewer), `dash` (away) or `bold` (front edge of a
+  Haworth ring).
+- **Formula check (`lib/visual/chem.ts`)**: when every atom is explicit, the formula is derived from the bonds and
+  compared with the spec's `formula`. A mismatch, an over-bonded atom, or a formula on a structure with
+  functional-group nodes is rejected. This verifies atom bookkeeping, not that the drawing is the right molecule.
+- Questions: molecular formula (with plausible wrong formulas), atom counts for C/N/O.
+- Built-in (awaiting review): β-D-glucose (Haworth), L-alanine, palmitic acid, AMP.
+
+## Other Phase 3 visuals
+- Gait cycle timeline (eight phases, Perry terminology, stance 0-60% / swing 60-100%) and an action-potential graph
+  with a schematic curve. Both built-in and awaiting review.
+- Not built: AI-generated illustrative images. No image provider is configured and I could not verify a provider API
+  offline. The structured diagrams never depend on image generation.
 
 ## Adding a visual type
 1. Add the name to `VISUAL_TYPES` in `lib/visual/schema.ts` (plus any per-type rule in `superRefine`).
@@ -87,4 +122,10 @@ optional "Explain in simpler words" is one request.
 - A `provenance: 'curated'` slot exists for human-reviewed specs; the model can never set it.
 
 ## Tests
-`npm test` (204 tests, Vitest) · `npm run typecheck`
+`npm test` (271 tests, Vitest) · `npm run typecheck`
+
+## Why there are no generated illustrations
+The brief allowed optional generated images. They are not included: image models draw plausible-looking but
+unverifiable anatomy and chemistry, I could not test any image provider from here, and an unlabelled image
+sitting next to verified diagrams would undermine them. If you add one later, keep it out of `VisualSpec`
+(no URLs in specs), serve it from your own route as a data URL, and frame it as "illustration, not a diagram".

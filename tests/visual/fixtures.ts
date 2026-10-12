@@ -1,7 +1,7 @@
 export * from '@/lib/visual/curated-data';
-import { midArmSection, proteinStructure, peptideBond, proteinSynthesis, glycolysis, brachialPlexus, bicepsBrachii, skinLayers, bodyWallLayers, kneeJoint, cellCycleCompare, enzymeMechanism, cycleExample } from '@/lib/visual/curated-data';
+import { betaGlucose, lAlanine, palmiticAcid, adenosineMonophosphate, gaitCycle, actionPotential, midArmSection, proteinStructure, peptideBond, proteinSynthesis, glycolysis, brachialPlexus, bicepsBrachii, skinLayers, bodyWallLayers, kneeJoint, cellCycleCompare, enzymeMechanism, cycleExample } from '@/lib/visual/curated-data';
 
-export const VALID_FIXTURES: Record<string, Record<string, any>> = { midArmSection, proteinStructure, peptideBond, proteinSynthesis, glycolysis, brachialPlexus, bicepsBrachii, skinLayers, bodyWallLayers, kneeJoint, cellCycleCompare, enzymeMechanism, cycleExample };
+export const VALID_FIXTURES: Record<string, Record<string, any>> = { betaGlucose, lAlanine, palmiticAcid, adenosineMonophosphate, gaitCycle, actionPotential, midArmSection, proteinStructure, peptideBond, proteinSynthesis, glycolysis, brachialPlexus, bicepsBrachii, skinLayers, bodyWallLayers, kneeJoint, cellCycleCompare, enzymeMechanism, cycleExample };
 
 export const NON_VISUAL_LESSON = {
   title: 'The Treaty of Versailles',
