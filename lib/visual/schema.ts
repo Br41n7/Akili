@@ -15,7 +15,6 @@
  * This module is safe to import on both server and client.
  */
 import { z } from 'zod';
-import { computeFormula, hill, parseFormula } from './chem';
 import { depthRanks } from './depth';
 import { DIRECTION_TERMS, OPPOSITE, RELATIONS, RELATION_KEYS, canonicalRelation, directionOf, type DirectionTerm } from './vocab';
 
@@ -40,10 +39,9 @@ export const ELEMENT_KINDS = [
   'enzyme', 'substance', 'event', 'decision', 'start', 'end',
 ] as const;
 export const INTERACTIONS = ['select', 'step_through', 'toggle_labels', 'reveal_layers'] as const;
+
 export const BOND_KINDS = ['covalent', 'ionic', 'hydrogen', 'peptide'] as const;
 export const ATTACHMENT_ROLES = ['origin', 'insertion'] as const;
-export const BOND_STYLES = ['plain', 'bold', 'wedge', 'dash'] as const;
-export const DISPLAYS = ['ball', 'skeletal'] as const;
 
 export const LIMITS = { elements: 24, relationships: 60, steps: 12, points: 24 } as const;
 
@@ -77,6 +75,12 @@ const Dir = z.enum(DIRECTION_TERMS);
 
 const Pos = z.object({ x: z.number().int().min(0).max(8), y: z.number().int().min(0).max(10) });
 
+const VIEW_VARIANT_SCHEMA = z.object({
+  view: z.enum(VIEWS),
+  axes: z.object({ left: Dir.optional(), right: Dir.optional(), top: Dir.optional(), bottom: Dir.optional() }).optional(),
+  positions: z.array(z.object({ id: Id, pos: Pos })).max(24).default([]),
+});
+
 const ElementSchema = z.object({
   id: Id,
   label: txt(60),
@@ -86,8 +90,6 @@ const ElementSchema = z.object({
   role: txt(300).optional(),
   when: txt(40).optional(),
   pos: Pos.optional(),
-  /** Fine coordinates (0-100) for drawn structures such as rings. Takes priority over pos. */
-  at: z.object({ x: z.number().min(0).max(100), y: z.number().min(0).max(100) }).optional(),
   symbol: z.string().regex(/^[A-Z][a-z]?$/).optional(),
   charge: z.number().int().min(-3).max(3).optional(),
   attributes: z.array(z.object({ name: txt(30), value: txt(220) })).max(8).optional(),
@@ -104,8 +106,6 @@ const RelationshipSchema = z.object({
   bond_kind: z.enum(BOND_KINDS).optional(),
   /** attaches_to only: which end of a muscle this is. `from` is the muscle, `to` the bone. */
   role: z.enum(ATTACHMENT_ROLES).optional(),
-  /** bonded_to only. wedge/dash: narrow end at `from`, pointing toward/away from the viewer. bold: front edge of a Haworth ring. */
-  bond_style: z.enum(BOND_STYLES).optional(),
 });
 
 const StepSchema = z.object({
@@ -130,10 +130,6 @@ export const VisualSpecSchema = z.object({
   learning_goal: txt(240),
   difficulty: z.enum(DIFFICULTIES).default('beginner'),
   view: z.enum(VIEWS).optional(),
-  /** molecular_structure: 'skeletal' hides carbons and shows implicit hydrogens on heteroatoms; needs `at` for every atom. */
-  display: z.enum(DISPLAYS).optional(),
-  /** Hill-order formula (e.g. C6H12O6). Only valid when every atom is explicit; it is checked against the bonds. */
-  formula: z.string().regex(/^(?:[A-Z][a-z]?\d*)+$/, 'formula must look like C6H12O6').optional(),
   /** What each screen edge means, e.g. { top: 'superior', left: 'lateral' }. Used to verify spatial relations. */
   axes: z.object({ left: Dir.optional(), right: Dir.optional(), top: Dir.optional(), bottom: Dir.optional() }).optional(),
   elements: z.array(ElementSchema).max(LIMITS.elements).default([]),
@@ -142,7 +138,8 @@ export const VisualSpecSchema = z.object({
   sequence: z.array(Id).max(LIMITS.elements).default([]),
   steps: z.array(StepSchema).max(LIMITS.steps).default([]),
   graph: GraphSchema.optional(),
-  interactions: z.array(z.enum(INTERACTIONS)).max(4).default([]),
+  interactions: z.array(z.enum(INTERACTIONS)).max(4).default(['select']),
+  view_variants: z.array(VIEW_VARIANT_SCHEMA).max(6).default([]),
   /** Set by code, never trusted from the model. */
   provenance: z.enum(['ai_generated', 'curated', 'curated_reviewed']).default('ai_generated'),
   caveat: txt(200).optional(),
@@ -166,6 +163,28 @@ export const VisualSpecSchema = z.object({
     seenSeq.add(id);
   }
   spec.steps.forEach((s, i) => s.elements.forEach(id => { if (!ids.has(id)) issue(`step ${i + 1} refers to unknown element "${id}"`); }));
+  const variantViews = new Set<string>();
+  for (const v of spec.view_variants) {
+    if (variantViews.has(v.view)) issue(`view variant "${v.view}" is duplicated`);
+    variantViews.add(v.view);
+    const variantIds = new Set<string>();
+    for (const p of v.positions) {
+      if (!ids.has(p.id)) issue(`view variant "${v.view}" refers to unknown element "${p.id}"`);
+      if (variantIds.has(p.id)) issue(`view variant "${v.view}" repeats "${p.id}"`);
+      variantIds.add(p.id);
+    }
+    if (v.axes) {
+      for (const r of spec.relationships) {
+        const def = RELATIONS[r.relation];
+        if (def.kind !== 'spatial') continue;
+        const a = variantIds.has(r.from) ? v.positions.find(x => x.id === r.from)?.pos : byId.get(r.from)?.pos;
+        const b = variantIds.has(r.to) ? v.positions.find(x => x.id === r.to)?.pos : byId.get(r.to)?.pos;
+        if (!a || !b) continue;
+        const verdict = spatialVerdict(v.axes, directionOf(r.relation)!, a, b);
+        if (verdict === 'contradiction') issue(`view variant "${v.view}" contradicts "${r.from}" ${def.phrase} "${r.to}"`);
+      }
+    }
+  }
 
   // Depth relations must not loop (A in front of B in front of A).
   if (depthRanks(spec).cyclic) issue('depth relations (superficial/deep or anterior/posterior) form a loop');
@@ -222,22 +241,6 @@ export const VisualSpecSchema = z.object({
       const cap = (MAX[el.symbol] ?? 8) + ((el.charge ?? 0) > 0 && (el.symbol === 'N' || el.symbol === 'O') ? 1 : 0);
       if ((used.get(el.id) ?? 0) > cap) issue(`atom "${el.label}" (${el.symbol}) has more bonds than its valence allows`);
     }
-  }
-
-  // Skeletal drawings and bond styles
-  if (spec.display === 'skeletal') {
-    if (spec.visual_type !== 'molecular_structure') issue('skeletal display is only for molecular_structure');
-    else if (spec.elements.some(e => !e.at)) issue('a skeletal structure needs an "at" coordinate for every atom');
-  }
-  for (const r of spec.relationships) if (r.bond_style && r.relation !== 'bonded_to') issue('bond_style is only valid on bonded_to');
-
-  // Molecular formula: derived from the bonds, must equal the stated one.
-  if (spec.formula) {
-    const stated = parseFormula(spec.formula);
-    const derived = spec.visual_type === 'molecular_structure' ? computeFormula(spec) : null;
-    if (!stated) issue(`formula "${spec.formula}" is not valid`);
-    else if (!derived) issue('a formula can only be given when every atom is explicit with a symbol and its bonds are valid');
-    else if (hill(stated) !== derived.formula) issue(`formula ${spec.formula} does not match the structure drawn (${derived.formula})`);
   }
 
   // Spatial relations must agree with the declared axes and positions.
@@ -319,8 +322,6 @@ export function normalizeRawSpec(raw: Obj, opts: { forceProvenance?: 'ai_generat
     kind: typeof e.kind === 'string' && (ELEMENT_KINDS as readonly string[]).includes(lower(e.kind) as string) ? lower(e.kind) : undefined,
     section: isObj(e.section) && Number.isFinite(Number(e.section.angle)) && Number.isFinite(Number(e.section.span))
       ? { ring: slug(String(e.section.ring ?? '')), angle: ((Math.round(Number(e.section.angle)) % 360) + 360) % 360, span: Math.min(180, Math.max(10, Math.round(Number(e.section.span)))) } : undefined,
-    at: isObj(e.at) && Number.isFinite(Number(e.at.x)) && Number.isFinite(Number(e.at.y))
-      ? { x: Math.min(100, Math.max(0, Math.round(Number(e.at.x) * 10) / 10)), y: Math.min(100, Math.max(0, Math.round(Number(e.at.y) * 10) / 10)) } : undefined,
     pos: isObj(e.pos) && Number.isFinite(Number(e.pos.x)) && Number.isFinite(Number(e.pos.y))
       ? { x: Math.round(Number(e.pos.x)), y: Math.round(Number(e.pos.y)) } : undefined,
   }));
@@ -337,9 +338,7 @@ export function normalizeRawSpec(raw: Obj, opts: { forceProvenance?: 'ai_generat
     const rawRole = lower(r.role) as string;
     const labelRole = typeof r.label === 'string' ? (lower(r.label) as string) : '';
     const role = relation === 'attaches_to' ? ((ATTACHMENT_ROLES as readonly string[]).includes(rawRole) ? rawRole : (ATTACHMENT_ROLES as readonly string[]).includes(labelRole) ? labelRole : undefined) : undefined;
-    const bs = lower(r.bond_style) as string;
-    const bond_style = relation === 'bonded_to' && (BOND_STYLES as readonly string[]).includes(bs) ? bs : undefined;
-    return [{ from, to, relation, label: r.label, bond_kind, bond_style, bond_order: Number.isInteger(order) ? order : undefined, role }];
+    return [{ from, to, relation, label: r.label, bond_kind, bond_order: Number.isInteger(order) ? order : undefined, role }];
   });
 
   const seq = (Array.isArray(out.sequence) ? out.sequence : []).map((s: unknown) => slug(String(s))).filter((s: string) => known.has(s));
@@ -360,15 +359,32 @@ export function normalizeRawSpec(raw: Obj, opts: { forceProvenance?: 'ai_generat
     out.axes = Object.keys(axes).length ? axes : undefined;
   } else out.axes = undefined;
 
-  const dsp = lower(out.display) as string;
-  out.display = (DISPLAYS as readonly string[]).includes(dsp) ? dsp : undefined;
-  if (typeof out.formula === 'string') {
-    const f = out.formula.replace(/\s+/g, '').replace(/[₀-₉]/g, (d: string) => String(d.charCodeAt(0) - 0x2080));
-    out.formula = f || undefined;
-  } else out.formula = undefined;
-
+  const hadInteractions = Array.isArray(out.interactions);
   out.interactions = (Array.isArray(out.interactions) ? out.interactions : [])
     .map(lower).filter((i: unknown) => (INTERACTIONS as readonly unknown[]).includes(i));
+  if (!hadInteractions) {
+    out.interactions = ['select'];
+    if (['anatomy', 'anatomy_layers', 'cross_section', 'molecular_structure', 'hierarchy', 'process'].includes(out.visual_type)) out.interactions.push('toggle_labels');
+    if (out.visual_type === 'anatomy_layers') out.interactions.push('reveal_layers');
+    if (out.visual_type === 'mechanism') out.interactions.push('step_through');
+  }
+
+  out.view_variants = (Array.isArray(out.view_variants) ? out.view_variants : []).filter(isObj).flatMap((v: Obj) => {
+    const view = lower(v.view) as string;
+    if (!(VIEWS as readonly string[]).includes(view)) return [];
+    const positions = (Array.isArray(v.positions) ? v.positions : []).filter(isObj).flatMap((x: Obj) => {
+      const id = slug(String(x.id ?? ''));
+      const pos = isObj(x.pos) ? { x: Math.round(Number(x.pos.x)), y: Math.round(Number(x.pos.y)) } : null;
+      return id && pos && Number.isFinite(pos.x) && Number.isFinite(pos.y) ? [{ id, pos }] : [];
+    });
+    const axesRaw = isObj(v.axes) ? v.axes : {};
+    const axes: Obj = {};
+    for (const side of ['left', 'right', 'top', 'bottom']) {
+      const term = lower(axesRaw[side]) as string;
+      if ((DIRECTION_TERMS as readonly string[]).includes(term)) axes[side] = term;
+    }
+    return [{ view, ...(Object.keys(axes).length ? { axes } : {}), positions }];
+  });
 
   if (opts.forceProvenance) out.provenance = opts.forceProvenance;
   else if (out.provenance !== 'curated' && out.provenance !== 'curated_reviewed') out.provenance = 'ai_generated';
@@ -415,6 +431,23 @@ export function elementMap(spec: VisualSpec): Map<string, VisualElement> {
 }
 
 /** Elements in display order: `sequence` first, anything not in it after. */
+export function applyViewVariant(spec: VisualSpec, view: VisualSpec['view']): VisualSpec {
+  if (!view || view === spec.view) return spec;
+  const variant = spec.view_variants.find(v => v.view === view);
+  if (!variant) return spec;
+  const pos = new Map(variant.positions.map(p => [p.id, p.pos]));
+  return {
+    ...spec,
+    view,
+    ...(variant.axes ? { axes: variant.axes } : {}),
+    elements: spec.elements.map(el => pos.has(el.id) ? { ...el, pos: pos.get(el.id) } : el),
+  };
+}
+
+export function availableViews(spec: VisualSpec): NonNullable<VisualSpec['view']>[] {
+  return [spec.view, ...spec.view_variants.map(v => v.view)].filter((v, i, a): v is NonNullable<VisualSpec['view']> => !!v && a.indexOf(v) === i);
+}
+
 export function orderedElements(spec: VisualSpec): VisualElement[] {
   const map = elementMap(spec);
   const seq = spec.sequence.map(id => map.get(id)).filter((e): e is VisualElement => !!e);

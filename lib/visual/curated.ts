@@ -30,12 +30,6 @@ export const CURATED: CuratedEntry[] = [
   { id: 'skin-layers', aliases: ['layers of the skin', 'skin layers', 'structure of the skin'], spec: D.skinLayers, reviewed: false },
   { id: 'skin-to-bone', aliases: ['layers from skin to bone', 'skin to bone'], spec: D.bodyWallLayers, reviewed: false },
   { id: 'knee-joint', aliases: ['knee joint', 'knee anatomy', 'anatomy of the knee'], spec: D.kneeJoint, reviewed: false },
-  { id: 'beta-d-glucose', aliases: ['glucose structure', 'structure of glucose', 'beta d glucose', 'haworth projection of glucose', 'glucose ring structure'], spec: D.betaGlucose, reviewed: false },
-  { id: 'amino-acid', aliases: ['amino acid structure', 'structure of amino acids', 'structure of an amino acid', 'l alanine'], spec: D.lAlanine, reviewed: false },
-  { id: 'fatty-acid', aliases: ['palmitic acid', 'fatty acid structure', 'structure of fatty acids', 'saturated fatty acid structure'], spec: D.palmiticAcid, reviewed: false },
-  { id: 'nucleotide', aliases: ['nucleotide structure', 'structure of a nucleotide', 'structure of nucleotides', 'adenosine monophosphate', 'amp structure'], spec: D.adenosineMonophosphate, reviewed: false },
-  { id: 'gait-cycle', aliases: ['gait cycle', 'phases of gait', 'phases of the gait cycle', 'gait phases'], spec: D.gaitCycle, reviewed: false },
-  { id: 'action-potential', aliases: ['action potential', 'the action potential'], spec: D.actionPotential, reviewed: false },
   { id: 'mid-arm-section', aliases: ['mid arm cross section', 'cross section of the arm', 'arm cross section'], spec: D.midArmSection, reviewed: false },
 ];
 

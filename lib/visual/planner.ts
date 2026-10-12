@@ -58,10 +58,10 @@ RULES
 - Anatomy origin/insertion: link the muscle to the bone with attaches_to and "role": "origin" or "insertion" (from = muscle, to = bone). Put the muscle's Action, Innervation and Blood supply in "attributes" and also link nerve and artery with innervated_by / supplied_by when shown.
 - Depth: use superficial_to / deep_to (or anterior_to / posterior_to with the correct "view") when one structure lies in front of another.
 - Cross_section: list layers outer to inner in "sequence". Place a structure inside a layer with "section": {"ring": layer id, "angle": 0-359 (0 = top, clockwise), "span": 10-180}. Say what top/bottom/left/right mean in "axes". Wedges in one layer must not overlap.
-- Drawn molecules (rings, chains, nucleotides): set "display": "skeletal" and give EVERY atom a "symbol" and "at" {x,y} in 0-100 (y grows downward, bond length about 12-16). Carbons are corners; do not add hydrogen atoms, they are filled in by valence. Use bond_order for double bonds and bond_style wedge/dash/bold for stereochemistry. Give the Hill-order "formula" (e.g. C6H12O6) only if you are certain; it is checked against your bonds and the visual is rejected if it does not match.
-- Drawn molecules (rings, sugars, nucleotides, fatty acids): set "display":"skeletal"; every atom needs a symbol and "at" {x,y} 0-100 (y grows downward) and every bond a bond_order. Use bond_style wedge/dash for stereochemistry (narrow end at "from") and bold for the front edge of a Haworth ring. Give "formula" in Hill order only when every atom is listed: it is recomputed from the bonds and a mismatch rejects the diagram. If you are not certain of a structure, return needs_visual false.
 - Mechanism: give "steps" (title, text, elements) describing what changes at each stage.
 - Comparison: at most 4 items, each with the same attribute names.
+- Set interactions explicitly: always include "select"; add "toggle_labels" when hiding labels is educational, "reveal_layers" for layered anatomy, and "step_through" for mechanisms where step-by-step viewing helps.
+- For anatomy, if multiple clinically useful views are necessary, include view_variants with each alternate view's axes and element positions. Never invent a second view merely for decoration.
 - Output a single JSON object only. No HTML, CSS, JavaScript, markdown, URLs or prose outside the JSON. Ids are lowercase_snake_case.`;
 
 export const PLANNER_PERSONA = 'You are a precise JSON-producing planner. You do not chat.';
@@ -100,17 +100,16 @@ Return JSON in this shape. If no visual is needed, return only {"needs_visual": 
  "subject": one of ${SUBJECTS.join(' | ')},
  "topic": string, "title": string, "learning_goal": string,
  "difficulty": "beginner" | "intermediate" | "advanced",
-
- "display"?: "ball"|"skeletal", "formula"?: "C6H12O6",
- "display"?: "ball"|"skeletal", "formula"?: string,
  "view": optional "anterior"|"posterior"|"lateral"|"medial"|"superior"|"inferior"|"sagittal"|"coronal"|"transverse"|"schematic",
  "axes": optional {"top"?: term, "bottom"?: term, "left"?: term, "right"?: term} using anterior|posterior|medial|lateral|superior|inferior|proximal|distal|superficial|deep,
  "elements": [{"id": string, "label": string, "short_label"?: string, "description": string, "role"?: string,
-   "pos"?: {"x": 0-8, "y": 0-10}, "symbol"?: "C", "at"?: {"x": 0-100, "y": 0-100}, "charge"?: number, "when"?: string,
+   "pos"?: {"x": 0-8, "y": 0-10}, "symbol"?: "C", "charge"?: number, "when"?: string,
    "attributes"?: [{"name": string, "value": string}], "section"?: {"ring": id, "angle": 0-359, "span": 10-180}}],
- "relationships": [{"from": id, "to": id, "relation": one of ${RELATION_KEYS.join(' | ')}, "label"?: string, "bond_order"?: 1-3, "role"?: "origin"|"insertion", "bond_style"?: "plain"|"bold"|"wedge"|"dash"}],
+ "relationships": [{"from": id, "to": id, "relation": one of ${RELATION_KEYS.join(' | ')}, "label"?: string, "bond_order"?: 1-3, "role"?: "origin"|"insertion"}],
  "sequence": [ids in display order],
  "steps": [{"title": string, "text": string, "elements": [ids]}],
+ "interactions": ["select", "toggle_labels"?, "reveal_layers"?, "step_through"?],
+ "view_variants": optional [{"view": "anterior"|"posterior"|"lateral"|"medial"|"superior"|"inferior"|"sagittal"|"coronal"|"transverse"|"schematic", "axes"?: object, "positions": [{"id": string, "pos": {"x": 0-8, "y": 0-10}}]}],
  "graph": optional {"kind": "line"|"bar", "x_label": string, "y_label": string, "points": [{"label": string, "y": number}]}
 }`;
 }

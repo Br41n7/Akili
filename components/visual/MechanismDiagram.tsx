@@ -11,16 +11,19 @@ export default function MechanismDiagram({ spec, selectedId, onSelect, highlight
   const map = elementMap(spec);
   const s = spec.steps[Math.min(step, spec.steps.length - 1)];
   const total = spec.steps.length;
+  const canStep = spec.interactions.includes('step_through');
   const active = new Set(s.elements);
 
   return (
     <div className="space-y-3">
+      {canStep && (
       <div className="flex flex-wrap items-center justify-center" role="tablist" aria-label="Steps">
         {spec.steps.map((st, i) => (
           <button key={i} type="button" role="tab" aria-selected={i === step} aria-label={`Step ${i + 1}: ${st.title}`} onClick={() => setStep(i)}
             className="flex h-11 min-w-11 items-center justify-center"><span className={cn('block h-2.5 rounded-full transition-all', i === step ? 'w-8 bg-biro' : i < step ? 'w-2.5 bg-ink' : 'w-2.5 bg-rule')} /></button>
         ))}
       </div>
+      )}
       <div className="rounded-xl border-2 border-biro bg-biro-wash p-3.5">
         <p className="text-xs font-bold uppercase tracking-wide text-biro-dark">Step {step + 1} of {total}</p>
         <p className="mt-0.5 font-bold leading-snug">{s.title}</p>
@@ -43,10 +46,10 @@ export default function MechanismDiagram({ spec, selectedId, onSelect, highlight
           </button>
         ))}
       </div>
-      <div className="grid grid-cols-2 gap-2">
+      {canStep && <div className="grid grid-cols-2 gap-2">
         <button type="button" disabled={step === 0} onClick={() => setStep(step - 1)} className="flex min-h-12 items-center justify-center gap-1 rounded-xl border border-rule bg-paper font-semibold disabled:opacity-40"><ChevronLeft size={18} /> Back</button>
         <button type="button" disabled={step >= total - 1} onClick={() => setStep(step + 1)} className="flex min-h-12 items-center justify-center gap-1 rounded-xl bg-ink font-semibold text-white disabled:opacity-40">Next <ChevronRight size={18} /></button>
-      </div>
+      </div>}
     </div>
   );
 }

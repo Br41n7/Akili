@@ -176,6 +176,8 @@ const visualQuestion = (data: unknown): Validation<Obj> => {
   const labels = (Array.isArray(data.diagram.labels) ? data.diagram.labels : [])
     .filter((l: unknown) => isObj(l) && str((l as Obj).id) && str((l as Obj).name));
   if (!labels.length) return fail('the diagram needs labels');
+  const allowedKinds = new Set(['skull', 'heart', 'cell', 'amino_acid', 'generic']);
+  if (!allowedKinds.has(str(data.diagram.kind))) return fail('the diagram kind is not supported');
   const q = normalizeQuestion({ ...data, type: 'multiple_choice' }, 0);
   if (!q) return fail('the visual question needs a question, options and a valid answer');
   return ok({ ...data, diagram: { ...data.diagram, labels }, ...q });

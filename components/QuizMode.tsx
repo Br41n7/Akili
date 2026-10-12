@@ -78,8 +78,8 @@ Material:
 ${context || 'No material supplied; use standard textbook knowledge for the learner’s level.'}
 Learner context: ${JSON.stringify(adaptive)}
 
-Return JSON only: {"diagram":{"kind":"skull|heart|cell|generic","title":string,"labels":[{"id":"I","name":string,"x":number,"y":number},{"id":"II","name":string,"x":number,"y":number},{"id":"III","name":string,"x":number,"y":number},{"id":"IV","name":string,"x":number,"y":number}],"note":string},"question":string,"options":["A) ...","B) ...","C) ...","D) ..."],"correct_answer":"A","explanation":string,"concept":string,"cognitive_level":"understanding|application|transfer"}.
-Use a schematic diagram, not a claim of anatomical precision. The label IDs must match the labels. Ask the learner to identify one labelled part or its function.`;
+Return JSON only: {"diagram":{"kind":"skull|heart|cell|amino_acid|generic","title":string,"labels":[{"id":"I","name":string,"x":number,"y":number},{"id":"II","name":string,"x":number,"y":number},{"id":"III","name":string,"x":number,"y":number},{"id":"IV","name":string,"x":number,"y":number}],"note":string},"question":string,"options":["A) ...","B) ...","C) ...","D) ..."],"correct_answer":"A","explanation":string,"concept":string,"cognitive_level":"understanding|application|transfer"}.
+Use a topic-appropriate schematic, not a generic placeholder when a specific structure is requested. Use amino_acid for amino-acid topics: show NH₂, COOH, H and R attached to central alpha-carbon V; I–IV identify the four substituent groups and V identifies the alpha-carbon. The stereocenter is V for amino acids with four different substituents; glycine is achiral when R is also H. Do not ask which substituent is the stereocenter. For other topics, use only the supported kind that fits. Label IDs must match options and the actual diagram. Never rely on x/y coordinates for layout.`;
         const data = await callAIJSON<any>({ task: 'diagram_question', prompt, region, persona, projectId, validationType: 'visual_question' });
         setGeneratedDiagram(data.diagram);
         setQuestions([{ ...data, id: `visual-${Date.now()}`, type: 'diagram' }]);

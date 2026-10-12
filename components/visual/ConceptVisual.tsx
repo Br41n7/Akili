@@ -27,6 +27,7 @@ export default function ConceptVisual({ concept, text, projectId, userId, region
   const [phase, setPhase] = useState<'idle' | 'loading' | 'ready' | 'none' | 'failed'>('idle');
   const [spec, setSpec] = useState<VisualSpec | null>(null);
   const [error, setError] = useState('');
+  const [simplifying, setSimplifying] = useState(false);
 
   const curated = matchCurated(concept);
   if (!curated && !shouldConsiderVisual(`${concept}\n${text}`).consider) return null;
@@ -49,6 +50,19 @@ export default function ConceptVisual({ concept, text, projectId, userId, region
         visualSpec={spec}
         ai={{ projectId, region, persona, userGroqKey }}
         onAnswer={(question, chosen, correct) => { void recordVisualAnswer({ userId, projectId, spec, question, chosen, correct }); }}
+        simplifying={simplifying}
+        onSimplify={async () => {
+          if (simplifying) return;
+          setSimplifying(true);
+          try {
+            const d = await requestLessonVisual({
+              title: concept, content: text, simplify: true, weakConcepts: [concept],
+              subjectHint: shouldConsiderVisual(`${concept}\n${text}`).subject, region, projectId, userGroqKey,
+            });
+            if (d.needs_visual) { setSpec(d.spec); setPhase('ready'); }
+          } catch { /* keep the current concept visual */ }
+          setSimplifying(false);
+        }}
       />
     );
   }

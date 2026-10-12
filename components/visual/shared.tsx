@@ -51,10 +51,10 @@ export function pinchZoom(startDist: number, curDist: number, startZoom: number,
  * content scrolls inside this box, never the page. The frame blocks the browser's own page-pinch so the
  * gesture zooms the diagram instead of the whole screen.
  */
-export function ZoomFrame({ children, label, initialZoom = 1 }: { children: (zoom: number) => ReactNode; label: string; initialZoom?: number }) {
-  const [zoom, setZoom] = useState(initialZoom);
+export function ZoomFrame({ children, label }: { children: (zoom: number) => ReactNode; label: string }) {
+  const [zoom, setZoom] = useState(1);
   const box = useRef<HTMLDivElement>(null);
-  const prev = useRef(initialZoom);
+  const prev = useRef(1);
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ dist: number; zoom: number } | null>(null);
 

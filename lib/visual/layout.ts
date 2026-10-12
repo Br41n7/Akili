@@ -78,20 +78,8 @@ export function wrapLabel(label: string, maxChars: number, lines = 2): string[] 
 
 export interface Point { id: string; x: number; y: number }
 
-export function moleculeLayout(spec: VisualSpec): { points: Point[]; height: number; scale?: number } {
+export function moleculeLayout(spec: VisualSpec): { points: Point[]; height: number } {
   const els = spec.elements;
-  // Fine coordinates (rings, chains): scale uniformly to fit the width, keep the aspect ratio.
-  if (els.length && els.every(e => e.at)) {
-    const xs = els.map(e => e.at!.x), ys = els.map(e => e.at!.y);
-    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-    const padX = 34, padY = 30;
-    const sc = Math.min((VIEW_W - padX * 2) / Math.max(1, maxX - minX), 460 / Math.max(1, maxY - minY));
-    const w = (maxX - minX) * sc;
-    return {
-      points: els.map(e => ({ id: e.id, x: (VIEW_W - w) / 2 + (e.at!.x - minX) * sc, y: padY + (e.at!.y - minY) * sc })),
-      height: padY * 2 + (maxY - minY) * sc, scale: sc,
-    };
-  }
   const allPos = els.every(e => e.pos);
   const pad = 36;
   if (allPos && els.length) {
@@ -169,24 +157,12 @@ export const polar = (cx: number, cy: number, r: number, deg: number) => {
 
 export interface Band { id: string; outer: number; inner: number }
 
-/**
- * Concentric bands outer→inner. The last layer is a solid core of radius `core`. `weights` (one per layer,
- * the core's is ignored) makes some bands thicker, e.g. the layer that holds wedge-shaped structures.
- */
-export function ringBands(ids: string[], outer = 82, core = 20, weights?: number[]): Band[] {
+/** Concentric bands outer→inner. The last layer is a solid core (inner = 0). */
+export function ringBands(ids: string[], outer = 82, core = 20): Band[] {
   const n = ids.length;
   if (n === 0) return [];
-  if (n === 1) return [{ id: ids[0], outer, inner: 0 }];
-  const w = ids.slice(0, -1).map((_, i) => Math.max(0.1, weights?.[i] ?? 1));
-  const total = w.reduce((a, b) => a + b, 0);
-  let r = outer;
-  return ids.map((id, i) => {
-    if (i === n - 1) return { id, outer: r, inner: 0 };
-    const t = ((outer - core) * w[i]) / total;
-    const band = { id, outer: r, inner: r - t };
-    r -= t;
-    return band;
-  });
+  const t = n > 1 ? (outer - core) / (n - 1) : outer;
+  return ids.map((id, i) => ({ id, outer: outer - i * t, inner: i === n - 1 ? 0 : outer - (i + 1) * t }));
 }
 
 /** SVG path for an annular wedge between radii r0 and r1, from centred angle ± span/2. */
@@ -206,11 +182,11 @@ export interface Callout { id: string; side: 'left' | 'right'; anchor: { x: numb
  * Puts each label on the left or right margin at the height of its anchor, then pushes labels apart so
  * none overlap. Order along each side always follows the anchors' vertical order.
  */
-export function calloutLayout(items: { id: string; anchor: { x: number; y: number }; side?: 'left' | 'right' }[], cx: number, height: number, opts: { gap?: number; margin?: number; leftX?: number; rightX?: number } = {}): Callout[] {
+export function calloutLayout(items: { id: string; anchor: { x: number; y: number } }[], cx: number, height: number, opts: { gap?: number; margin?: number; leftX?: number; rightX?: number } = {}): Callout[] {
   const { gap = 34, margin = 20, leftX = 8, rightX = VIEW_W - 8 } = opts;
   const out: Callout[] = [];
   for (const side of ['left', 'right'] as const) {
-    const group = items.filter(i => (i.side ? i.side === side : side === 'left' ? i.anchor.x < cx : i.anchor.x >= cx)).sort((a, b) => a.anchor.y - b.anchor.y);
+    const group = items.filter(i => (side === 'left' ? i.anchor.x < cx : i.anchor.x >= cx)).sort((a, b) => a.anchor.y - b.anchor.y);
     const ys = group.map(g => Math.min(height - margin, Math.max(margin, g.anchor.y)));
     for (let i = 1; i < ys.length; i++) ys[i] = Math.max(ys[i], ys[i - 1] + gap);
     const over = ys.length ? ys[ys.length - 1] - (height - margin) : 0;
@@ -218,46 +194,4 @@ export function calloutLayout(items: { id: string; anchor: { x: number; y: numbe
     group.forEach((g, i) => out.push({ id: g.id, side, anchor: g.anchor, label: { x: side === 'left' ? leftX : rightX, y: Math.max(margin, ys[i]) } }));
   }
   return out;
-}
-
-// ── Bond geometry (skeletal structures) ─────────────────────────────────────
-
-/** Shorten a segment by `ga` at the start and `gb` at the end (to leave room for atom labels). */
-export function shortenSegment(a: { x: number; y: number }, b: { x: number; y: number }, ga: number, gb: number) {
-  const dx = b.x - a.x, dy = b.y - a.y;
-  const len = Math.hypot(dx, dy) || 1;
-  const ux = dx / len, uy = dy / len;
-  const g1 = Math.min(ga, len * 0.4), g2 = Math.min(gb, len * 0.4);
-  return { a: { x: a.x + ux * g1, y: a.y + uy * g1 }, b: { x: b.x - ux * g2, y: b.y - uy * g2 }, nx: -uy, ny: ux, len };
-}
-
-/** Triangle for a wedge bond: narrow at the first point, `width` wide at the second. */
-export function wedgePoints(a: { x: number; y: number }, b: { x: number; y: number }, width = 9): string {
-  const { nx, ny } = shortenSegment(a, b, 0, 0);
-  const f = (n: number) => Math.round(n * 100) / 100;
-  return `${f(a.x)},${f(a.y)} ${f(b.x + (nx * width) / 2)},${f(b.y + (ny * width) / 2)} ${f(b.x - (nx * width) / 2)},${f(b.y - (ny * width) / 2)}`;
-}
-
-/** Short cross-strokes growing wider toward the far end: a hashed (away-from-viewer) bond. */
-export function dashStrokes(a: { x: number; y: number }, b: { x: number; y: number }, n = 6, maxHalf = 5): { x1: number; y1: number; x2: number; y2: number }[] {
-  const { nx, ny } = shortenSegment(a, b, 0, 0);
-  return Array.from({ length: n }, (_, i) => {
-    const t = (i + 1) / (n + 1), half = 1 + ((maxHalf - 1) * (i + 1)) / n;
-    const cx = a.x + (b.x - a.x) * t, cy = a.y + (b.y - a.y) * t;
-    return { x1: cx - nx * half, y1: cy - ny * half, x2: cx + nx * half, y2: cy + ny * half };
-  });
-}
-
-/**
- * Would a straight connector between the centres of boxes `a` and `b` pass behind any other box?
- * Such a connector shows up in the gaps between boxes and reads as a relation between the wrong pair,
- * so the diagram leaves it out (the relation is still listed in the detail panel).
- */
-export function connectorIsObstructed(a: Box, b: Box, others: Box[], pad = 2): boolean {
-  const ax = a.x + a.w / 2, ay = a.y + a.h / 2, bx = b.x + b.w / 2, by = b.y + b.h / 2;
-  for (let t = 0.05; t <= 0.95; t += 0.01) {
-    const x = ax + (bx - ax) * t, y = ay + (by - ay) * t;
-    for (const o of others) if (o.id !== a.id && o.id !== b.id && x > o.x - pad && x < o.x + o.w + pad && y > o.y - pad && y < o.y + o.h + pad) return true;
-  }
-  return false;
 }

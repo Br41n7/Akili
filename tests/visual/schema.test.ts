@@ -101,6 +101,25 @@ describe('10. invalid AI VisualSpec is rejected, never rendered', () => {
     s.elements[0].id = 'Roots!'; s.sequence = []; s.relationships.forEach((r: any) => { if (r.from === 'roots') r.from = 'Roots!'; if (r.to === 'roots') r.to = 'Roots!'; });
     expect(decide(s).ok).toBe(true);
   });
+  it('defaults missing interaction metadata to safe capabilities and validates alternate views', () => {
+    const base = clone(F.kneeJoint);
+    delete base.interactions;
+    const d = parseVisualSpec({ ...base, view_variants: [{ view: 'posterior', axes: { top: 'superior', bottom: 'inferior', left: 'medial', right: 'lateral' }, positions: base.elements.map((e: any) => ({ id: e.id, pos: e.pos ?? { x: 4, y: 4 } })) }] });
+    expect(d.ok).toBe(true);
+    if (d.ok) {
+      expect(d.data.interactions).toContain('select');
+      expect(d.data.interactions).toContain('toggle_labels');
+      expect(d.data.view_variants[0].view).toBe('posterior');
+    }
+  });
+  it('rejects an alternate view with an unknown element or contradictory geometry', () => {
+    const base = clone(F.kneeJoint);
+    const badUnknown = { ...base, view_variants: [{ view: 'posterior', axes: { left: 'lateral', right: 'medial' }, positions: [{ id: 'ghost', pos: { x: 1, y: 1 } }] }] };
+    expect(bad(badUnknown)).toMatch(/unknown element/);
+    const badGeometry = { ...base, view_variants: [{ view: 'posterior', axes: { left: 'lateral', right: 'medial' }, positions: [{ id: 'lmen', pos: { x: 7, y: 5 } }, { id: 'mmen', pos: { x: 2, y: 5 } }] }] };
+    expect(bad(badGeometry)).toMatch(/contradicts/);
+  });
+
   it('re-validation guard returns null for garbage (what the renderer relies on)', () => {
     expect(safeVisualSpec(undefined)).toBeNull();
     expect(safeVisualSpec({ visual_type: 'process' })).toBeNull();

@@ -6,9 +6,8 @@ import { C, SvgText, ZoomFrame, type DiagramProps } from './shared';
 
 const FILL = ['#F7E1D3', '#EBC3AE', '#E4B4A0', '#D8A58F', '#C9917F'];
 const WEDGE = ['#B9D3F2', '#F4C7A1', '#CDE7C4', '#E3C4EC', '#F3E19B'];
-const CX = 180, CY = 158, R = 92, CORE = 26;
-const H = 330;
-const LEFT_END = 86, RIGHT_END = 274;
+const CX = 180, CY = 150, R = 80;
+const H = 310;
 
 /**
  * Concentric layers (outermost first) with wedge-shaped structures placed inside a layer by angle
@@ -19,26 +18,17 @@ export default function CrossSectionDiagram({ spec, selectedId, onSelect, highli
   const map = elementMap(spec);
   const layers = spec.sequence.map(id => map.get(id)).filter((e): e is NonNullable<typeof e> => !!e);
   const wedges = spec.elements.filter(e => e.section && map.has(e.section.ring));
-  // Layers that hold wedges get three times the thickness so the wedges are big enough to see and tap.
-  const weights = layers.map(l => (wedges.some(w => w.section!.ring === l.id) ? 3 : 1));
-  const bands = ringBands(layers.map(l => l.id), R, CORE, weights);
+  const bands = ringBands(layers.map(l => l.id), R);
   const band = new Map(bands.map(b => [b.id, b]));
   const num = new Map([...layers, ...wedges].map((e, i) => [e.id, i + 1]));
   const axes = spec.axes ?? {};
 
-  // Layer labels go on the right, fanned from top (outer) to bottom (core) so leader lines never cross.
-  // Wedge labels go on the side of the diagram they sit on.
-  const n = layers.length;
+  // Leader-line anchors: a layer is pointed at along 55° (right) / 305° (left) alternating; wedges at their own centre.
   const anchors = [
-    ...layers.map((l, i) => { const b = band.get(l.id)!; return { id: l.id, side: 'right' as const, anchor: polar(CX, CY, i === n - 1 ? CORE * 0.45 : (b.outer + b.inner) / 2, n === 1 ? 90 : 62 + (i / (n - 1)) * 58) }; }),
-    ...wedges.map(w => {
-      const b = band.get(w.section!.ring)!; const a = w.section!.angle;
-      const sin = Math.sin((a * Math.PI) / 180);
-      const side = sin > 0.05 ? 'right' as const : sin < -0.05 ? 'left' as const : (Math.cos((a * Math.PI) / 180) > 0 ? 'right' as const : 'left' as const);
-      return { id: w.id, side, anchor: polar(CX, CY, (b.outer + b.inner) / 2, a) };
-    }),
+    ...layers.map((l, i) => { const b = band.get(l.id)!; return { id: l.id, anchor: polar(CX, CY, i === layers.length - 1 ? 8 : (b.outer + b.inner) / 2, i % 2 === 0 ? 125 : 235) }; }),
+    ...wedges.map(w => { const b = band.get(w.section!.ring)!; return { id: w.id, anchor: polar(CX, CY, (b.outer + b.inner) / 2, w.section!.angle) }; }),
   ];
-  const callouts = calloutLayout(anchors, CX, H, { leftX: 0, rightX: 0, gap: 36 });
+  const callouts = calloutLayout(anchors, CX, H, { leftX: 8, rightX: 352, gap: 36 });
   const labelOf = (id: string) => (showLabels ? (map.get(id)!.short_label || map.get(id)!.label) : String(num.get(id)));
 
   const pick = (id: string) => onSelect(selectedId === id ? null : id);
@@ -68,22 +58,21 @@ export default function CrossSectionDiagram({ spec, selectedId, onSelect, highli
             })}
             {callouts.map(c => {
               const sel = selectedId === c.id;
-              const lines = wrapLabel(labelOf(c.id), 12, 3);
-              const left = c.side === 'left';
-              const lineEnd = left ? LEFT_END : RIGHT_END;
-              const tx = left ? lineEnd - 4 : lineEnd + 4;
+              const lines = wrapLabel(labelOf(c.id), 11, 3);
+              const tx = c.side === 'left' ? c.label.x : c.label.x;
+              const lineEnd = { x: c.side === 'left' ? 78 : 282, y: c.label.y };
               return (
                 <g key={c.id} onClick={() => pick(c.id)} style={{ cursor: 'pointer' }}>
-                  <polyline points={`${c.anchor.x},${c.anchor.y} ${lineEnd},${c.label.y}`} fill="none" stroke={sel ? C.biro : C.muted} strokeWidth={sel ? 2 : 1.2} />
+                  <polyline points={`${c.anchor.x},${c.anchor.y} ${lineEnd.x},${lineEnd.y}`} fill="none" stroke={sel ? C.biro : C.muted} strokeWidth={sel ? 2 : 1.2} />
                   <circle cx={c.anchor.x} cy={c.anchor.y} r={2.8} fill={sel ? C.biro : C.ink} />
-                  <rect x={left ? 0 : lineEnd} y={c.label.y - 18} width={left ? lineEnd : 360 - lineEnd} height={36} fill="transparent" />
-                  <text textAnchor={left ? 'end' : 'start'} x={tx} fontSize={10.5} fontWeight={700} fill={sel ? C.biro : C.ink} style={{ userSelect: 'none' }}>
+                  <rect x={c.side === 'left' ? 4 : 282} y={c.label.y - 17} width={74} height={34} fill="transparent" />
+                  <text textAnchor={c.side === 'left' ? 'start' : 'end'} x={tx} fontSize={11} fontWeight={700} fill={sel ? C.biro : C.ink} style={{ userSelect: 'none' }}>
                     {lines.map((ln, k) => <tspan key={k} x={tx} y={c.label.y - ((lines.length - 1) * 6.5) + k * 13 + 4}>{ln}</tspan>)}
                   </text>
                 </g>
               );
             })}
-            <SvgText lines={[axes.top ? `↑ ${cap(axes.top)}` : '']} x={CX} y={CY - R - 10} size={11} fill={C.muted} />
+            <SvgText lines={[axes.top ? `↑ ${cap(axes.top)}` : '']} x={CX} y={CY - R - 12} size={11} fill={C.muted} />
             <SvgText lines={[axes.bottom ? `↓ ${cap(axes.bottom)}` : '']} x={CX} y={CY + R + 14} size={11} fill={C.muted} />
           </svg>
         )}
