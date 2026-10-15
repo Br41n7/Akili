@@ -105,7 +105,7 @@ Every structured AI response (JSON) goes through:
 ### Materials Tab
 Upload PDFs and TXT files (max 15MB). Import Google Docs via URL.
 Text is extracted, sanitized, and chunked into 2000-char segments.
-All AI features use this content as context.
+All AI features use this content as context. Personal notes can also be captured with the floating Quick note button from anywhere in a project; they are saved to Materials → Notes and included in course generation and Ask AI context.
 
 **Supported sources:**
 - PDF files (text-searchable, not scanned images)
@@ -122,7 +122,7 @@ structured course:
 - Worked examples with step-by-step solutions
 - Common mistakes section
 - 3 practice questions per lesson with explanations
-- Progress tracking (completed lessons saved to Supabase)
+- Progress tracking (completed lessons saved to Supabase). Lessons can include a contextual visual explanation/diagram for structures, molecules, anatomy, and processes; visuals are rendered inside the relevant lesson rather than in a separate unrelated section.
 
 Course generation uses Groq + Llama 3.3 70B for high-quality
 long-form structured output.
@@ -168,7 +168,7 @@ Responds in the student's chosen persona style.
 
 ---
 
-## API Reference
+## API Reference\n\nFor the current endpoint contract and external-integration limitations, see [`API_REFERENCE.md`](./API_REFERENCE.md). A partial OpenAPI 3.1 schema for the internal AI endpoint is available in [`openapi.internal.yaml`](./openapi.internal.yaml). This is not yet a supported public third-party API.
 
 ### POST /api/ai/generate
 Main AI endpoint. All AI features route through here.

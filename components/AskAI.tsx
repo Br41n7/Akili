@@ -40,18 +40,22 @@ export default function AskAI({ projectId, userId, region, persona, onGoToMateri
     setLoading(true);
 
     try {
-      const [{ data: docs }, learner] = await Promise.all([
-        supabase.from('documents').select('content, name').eq('project_id', projectId).eq('user_id', userId).limit(4),
+      const [{ data: docs }, { data: notes }, learner] = await Promise.all([
+        supabase.from('documents').select('content, name').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(4),
+        supabase.from('notes').select('content, title').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(8),
         getLearnerContext(projectId, userId),
       ]);
-      const context = (docs || []).map(d => `[${d.name}]\n${d.content}`).join('\n\n').slice(0, 8000);
+      const context = [
+        ...(docs || []).map(d => `[UPLOADED MATERIAL: ${d.name}]\n${d.content}`),
+        ...(notes || []).map(n => `[STUDENT NOTE: ${n.title || 'Untitled note'}]\n${n.content}`),
+      ].join('\n\n').slice(0, 10000);
       const adaptive = compactLearnerContext(learner);
       const historyText = messages.slice(-6).map(m => `${m.role === 'user' ? 'Student' : 'Tutor'}: ${m.text}`).join('\n');
 
       const prompt = `You are Akili, an adaptive AI tutor. Answer the student's question using the project materials and the learner context below.
 
-Project materials:
-${context || 'No materials uploaded yet. Answer from general syllabus knowledge for the learner’s level, and mention that adding materials would make answers more specific.'}
+Project materials (the source of truth for this project):
+${context || 'No materials or saved notes are available yet. Do not guess the course syllabus. Ask the learner to upload material or add a note; you may explain what information is needed, but do not generate course-specific claims or assessment questions.'}
 
 Learner context (evidence, not absolute truth): ${JSON.stringify(adaptive)}
 
@@ -60,7 +64,12 @@ ${historyText || 'No previous conversation.'}
 
 Student question: ${text}
 
-Teach for understanding, not just completion. If the learner seems confused, explain the missing prerequisite or use a simpler example instead of adding more information. Do not mention internal mastery scores. Answer in markdown, using short paragraphs.`;
+STRICT SCOPE AND LEVEL RULES:
+- Answer from the project materials and saved notes first. Do not present facts beyond them as if they were taught in this course.
+- If the answer requires information not covered by the supplied sources, say that the sources do not cover it and ask whether the learner wants a clearly labelled general explanation.
+- Match vocabulary, depth, and examples to the learner's education level and class/year. Never give a Grade 8/JSS-level learner an advanced secondary or university-level answer or question.
+- If a prerequisite is needed, explain only the minimum prerequisite in a clearly labelled short section.
+- Teach for understanding, not just completion. If confused, simplify or check the prerequisite instead of adding unrelated detail. Do not mention internal mastery scores. Answer in markdown, using short paragraphs.`;
 
       const result = await callAI({ task: 'adaptive_tutor', prompt, region, persona, projectId });
       setMessages(p => [...p, { role: 'ai', text: result }]);

@@ -19,6 +19,7 @@ import TopicAnalysis from '@/components/TopicAnalysis';
 import Materials from '@/components/Materials';
 import LearningProgress from '@/components/LearningProgress';
 import ResearchLab from '@/components/ResearchLab';
+import QuickNoteModal from '@/components/QuickNoteModal';
 
 type Tab = 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'ask' | 'analysis' | 'progress' | 'research';
 
@@ -161,6 +162,8 @@ export default function ProjectPage() {
         {tab === 'ask' && <AskAI projectId={projectId} userId={user.id} region={region} persona={persona} onGoToMaterials={() => setTab('materials')} />}
         {tab === 'research' && <ResearchLab projectId={projectId} userId={user.id} region={region} persona={persona} />}
       </main>
+
+      <QuickNoteModal projectId={projectId} userId={user.id} />
 
       {/* Phone: bottom bar */}
       <nav aria-label="Project sections" className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-paper md:hidden">

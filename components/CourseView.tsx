@@ -75,8 +75,14 @@ export default function CourseView({ projectId, userId, region, persona, userGro
     setGenerating(true);
     setGenError('');
     try {
-      const { data: docs } = await supabase.from('documents').select('content, name').eq('project_id', projectId).eq('user_id', userId).limit(5);
-      const context = (docs || []).map(d => `[${d.name}]\n${d.content}`).join('\n\n').slice(0, 8000);
+      const [{ data: docs }, { data: notes }] = await Promise.all([
+        supabase.from('documents').select('content, name').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(5),
+        supabase.from('notes').select('content, title').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(10),
+      ]);
+      const context = [
+        ...(docs || []).map(d => `[UPLOADED MATERIAL: ${d.name}]\n${d.content}`),
+        ...(notes || []).map(n => `[STUDENT NOTE: ${n.title || 'Untitled note'}]\n${n.content}`),
+      ].join('\n\n').slice(0, 12000);
       if (!context.trim()) {
         setGenError('Add at least one document or note in Materials first. Akili builds the course from what you add.');
         return;
@@ -89,12 +95,22 @@ export default function CourseView({ projectId, userId, region, persona, userGro
 Study materials:
 ${context}
 
+Learner level and scope:
+- Education level: ${secondary ? 'Secondary / O-Level' : 'University / college'}.
+- Class/year: ${project?.class_level || project?.study_year || 'not specified'}.
+- Subject/course: ${topic}.
+- Adapt vocabulary, assumptions, worked examples, and question difficulty to this learner level. A secondary-school learner must not receive university-level questions or terminology unless the supplied material explicitly requires it.
+- Treat the supplied study materials as the authoritative scope. Do not introduce new subtopics, advanced facts, clinical details, or exam content that the materials do not teach.
+- If a prerequisite is essential, explain it briefly in a clearly marked "Prerequisite" note, using simple language; do not let it expand the lesson scope.
+- If the materials do not contain enough information to teach a requested topic accurately, say so in the lesson content instead of inventing details.
+
 Requirements:
-- 3 to 5 modules, each with 2 to 4 lessons.
-- Each lesson: learning objectives, ${secondary ? 'clear explanations of at least 250 words' : 'a thorough explanation of at least 350 words'} in markdown, key concepts, one worked example, common mistakes, and 3 practice questions.
-- Practice questions have four options labelled "A) ", "B) ", "C) ", "D) " and correct_answer is just the letter.
-- Use examples that make sense for a learner in ${region}.
-- Base lessons on the materials. Do not invent details about the learner's own course or teacher.
+- Create 2 to 4 modules, each with 2 to 4 lessons, based only on topics actually present in the supplied materials.
+- Each lesson: learning objectives, ${secondary ? 'clear explanations of about 150–250 words' : 'a thorough explanation of about 250–350 words'} in markdown, key concepts, one worked example, common mistakes, and 3 practice questions.
+- Every practice question must be answerable from the lesson and supplied materials, and appropriate for the learner's education level. Four options labelled "A) ", "B) ", "C) ", "D) "; correct_answer is just the letter.
+- Use examples that make sense for a learner in ${region}, but do not allow cultural examples to introduce unrelated syllabus content.
+- Visual teaching is part of the lesson, not a separate unrelated feature. For each lesson where a structure, anatomy, molecule, process, cycle, comparison, hierarchy, or spatial relationship is central to understanding, include a concise visual brief in the lesson content using a heading "Visual explanation" and specify: what should be drawn, the essential labelled parts, and what each label means. For molecular topics such as proteins, describe the relevant structural level (primary, secondary, tertiary, or quaternary) only if supported by the supplied material. Do not fabricate detailed scientific structures or labels; if the source is insufficient, state what visual detail is missing.
+- Do not invent details about the learner's own course or teacher.
 
 Return JSON:
 {"title": string, "description": string, "estimated_duration": string,

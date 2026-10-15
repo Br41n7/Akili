@@ -1,0 +1,91 @@
+openapi: 3.1.0
+info:
+  title: Akili Internal Application API
+  version: 0.1.0
+  description: >
+    Partial OpenAPI contract for the current internal Akili application endpoint.
+    Session-authenticated and not yet a supported public third-party API.
+servers:
+  - url: /
+paths:
+  /api/ai/generate:
+    post:
+      summary: Generate AI content for a signed-in Akili user
+      description: >
+        Requires the user's Supabase Auth session. If projectId is provided,
+        the server verifies that the project belongs to the authenticated user.
+        For format=json, result is currently a JSON-encoded string.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [task, prompt]
+              properties:
+                task:
+                  type: string
+                  minLength: 1
+                  maxLength: 40
+                prompt:
+                  type: string
+                  minLength: 1
+                  maxLength: 24000
+                systemInstruction:
+                  type: string
+                  maxLength: 4000
+                format:
+                  type: string
+                  enum: [json, text]
+                  default: text
+                persona:
+                  type: string
+                  maxLength: 300
+                  default: friendly
+                region:
+                  type: string
+                  maxLength: 60
+                  default: Nigeria
+                projectId:
+                  type: string
+                  format: uuid
+                validationType:
+                  type: string
+                  maxLength: 40
+                userGroqKey:
+                  type: string
+                  maxLength: 200
+                  writeOnly: true
+                image:
+                  type: object
+                  required: [base64, mimeType]
+                  properties:
+                    base64:
+                      type: string
+                    mimeType:
+                      type: string
+                      enum: [image/png, image/jpeg, image/webp]
+      responses:
+        '200':
+          description: Generation succeeded
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [result]
+                properties:
+                  result:
+                    description: Generated text or JSON-encoded structured result.
+                    type: string
+                  keyRejected:
+                    type: boolean
+        '400':
+          description: Invalid JSON or request fields
+        '401':
+          description: Authentication required
+        '404':
+          description: Project missing or not owned by the authenticated user
+        '429':
+          description: Request rate or daily allowance exceeded
+        '500':
+          description: Unexpected or provider failure
