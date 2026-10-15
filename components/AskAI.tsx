@@ -20,6 +20,7 @@ export default function AskAI({ projectId, userId, region, persona, onGoToMateri
   const [practice, setPractice] = useState<QuickQuestion[]>([]);
   const [practiceError, setPracticeError] = useState('');
   const [practiceAnswers, setPracticeAnswers] = useState<Record<string, string>>({});
+  const [practiceChecked, setPracticeChecked] = useState<Record<string, boolean>>({});
   const [practiceSubmitted, setPracticeSubmitted] = useState(false);
   const [practiceLoading, setPracticeLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
@@ -85,7 +86,7 @@ STRICT SCOPE AND LEVEL RULES:
     if (!aiMessage) return;
     const precedingUser = [...messages.slice(0, messageIndex)].reverse().find(m => m.role === 'user');
     setPracticeFor(messageIndex);
-    setPractice([]); setPracticeAnswers({}); setPracticeSubmitted(false); setPracticeLoading(true); setPracticeError('');
+    setPractice([]); setPracticeAnswers({}); setPracticeChecked({}); setPracticeSubmitted(false); setPracticeLoading(true); setPracticeError('');
 
     try {
       const learner = await getLearnerContext(projectId, userId);
@@ -99,7 +100,28 @@ Learner context: ${JSON.stringify(adaptive)}
 The questions must test understanding, not copying sentences from the explanation. Progress from understanding to application/transfer. Include concept and cognitive_level for each question.
 Return JSON: { "questions": [{ "id": string, "question": string, "options": ["A) ...","B) ...","C) ...","D) ..."], "correct_answer": "A"|"B"|"C"|"D", "explanation": string, "concept": string, "cognitive_level": string }] }`;
       const data = await callAIJSON<any>({ task: 'adaptive_quiz', prompt, region, persona, projectId, validationType: 'quick_check' });
-      setPractice(data.questions.slice(0, 3));
+      const questions: QuickQuestion[] = (Array.isArray(data?.questions) ? data.questions : []).slice(0, 3).map((raw: any, index: number) => {
+        const options = Array.isArray(raw?.options) ? raw.options.map((value: unknown) => String(value)) : [];
+        const rawAnswer = String(raw?.correct_answer ?? '').trim();
+        const answerMatch = rawAnswer.match(/^([A-D])(?:[).:\-]|$)/i);
+        const answerText = rawAnswer.replace(/^[A-D][).:\-]\s*/i, '').trim().toLowerCase();
+        const answerFromText = options.find((option: string) => {
+          const { letter, text } = splitOption(option);
+          return option.trim().toLowerCase() === rawAnswer.toLowerCase() || text.trim().toLowerCase() === answerText;
+        });
+        const answerLetter = answerMatch?.[1]?.toUpperCase() || (answerFromText ? splitOption(answerFromText).letter : '');
+        return {
+          id: String(raw?.id || `quick-${messageIndex}-${index}`),
+          question: String(raw?.question || ''),
+          options,
+          correct_answer: answerLetter,
+          explanation: String(raw?.explanation || ''),
+          concept: String(raw?.concept || 'Understanding check'),
+          cognitive_level: String(raw?.cognitive_level || 'understanding'),
+        };
+      }).filter((q: QuickQuestion) => q.question && q.options.length >= 2 && /^[A-D]$/.test(q.correct_answer));
+      if (!questions.length) throw new Error('The quick check returned questions in an unsupported format. Please try again.');
+      setPractice(questions);
     } catch (err) {
       setPracticeError(errorMessage(err, 'Could not build a quick check.'));
     } finally {
@@ -107,14 +129,23 @@ Return JSON: { "questions": [{ "id": string, "question": string, "options": ["A)
     }
   };
 
-  const submitQuickCheck = async () => {
+  const chooseQuickAnswer = async (question: QuickQuestion, letter: string) => {
+    if (practiceChecked[question.id]) return;
+    const nextAnswers = { ...practiceAnswers, [question.id]: letter };
+    const nextChecked = { ...practiceChecked, [question.id]: true };
+    setPracticeAnswers(nextAnswers);
+    setPracticeChecked(nextChecked);
+
+    const allAnswered = practice.every(q => nextChecked[q.id]);
+    if (!allAnswered) return;
+
     setPracticeSubmitted(true);
     for (const q of practice) {
       try {
         await recordEvidence({
           userId, projectId, concept: q.concept || 'General', sourceType: 'practice',
           interactionType: q.cognitive_level || 'quick_check', prompt: q.question,
-          learnerResponse: practiceAnswers[q.id] || '', correctness: practiceAnswers[q.id] === q.correct_answer,
+          learnerResponse: nextAnswers[q.id] || '', correctness: nextAnswers[q.id] === q.correct_answer,
           difficulty: 'adaptive', evidence: q.explanation,
         });
       } catch { /* progress tracking must never block the chat */ }
@@ -166,17 +197,23 @@ Return JSON: { "questions": [{ "id": string, "question": string, "options": ["A)
                       {q.options.map(opt => {
                         const { letter, text } = splitOption(opt);
                         const picked = practiceAnswers[q.id] === letter;
+                        const checked = !!practiceChecked[q.id];
                         let state: OptionState = picked ? 'selected' : 'idle';
-                        if (practiceSubmitted) state = letter === q.correct_answer ? (picked ? 'correct' : 'missed') : picked ? 'wrong' : 'idle';
-                        return <OptionRow key={letter} letter={letter} text={text} state={state} disabled={practiceSubmitted} onClick={() => setPracticeAnswers(a => ({ ...a, [q.id]: letter }))} />;
+                        if (checked) state = letter === q.correct_answer ? (picked ? 'correct' : 'missed') : picked ? 'wrong' : 'idle';
+                        return <OptionRow key={letter} letter={letter} text={text} state={state} disabled={checked} onClick={() => chooseQuickAnswer(q, letter)} />;
                       })}
-                      {practiceSubmitted && q.explanation && <p className="text-xs leading-relaxed text-muted">{q.explanation}</p>}
+                      {practiceChecked[q.id] && (
+                        <div role="status" className={`rounded-lg p-2.5 text-sm ${practiceAnswers[q.id] === q.correct_answer ? 'bg-tick-wash text-tick' : 'bg-redpen-wash text-redpen'}`}>
+                          <p className="font-bold">{practiceAnswers[q.id] === q.correct_answer ? 'Correct!' : `Not quite. Correct answer: ${q.correct_answer}.`}</p>
+                          {q.explanation && <p className="mt-1 leading-relaxed text-ink">{q.explanation}</p>}
+                        </div>
+                      )}
                     </Surface>
                   ))}
                   {practice.length > 0 && !practiceSubmitted && (
-                    <Button size="sm" block disabled={Object.keys(practiceAnswers).length < practice.length} onClick={submitQuickCheck}>Check answers</Button>
+                    <p className="text-xs text-muted">Choose an option for each question. Akili will mark it immediately.</p>
                   )}
-                  {practiceSubmitted && <p className="text-xs font-semibold text-tick">Added to your learning profile.</p>}
+                  {practiceSubmitted && <p className="text-xs font-semibold text-tick">All answers checked and added to your learning profile.</p>}
                 </div>
               )}
             </div>
