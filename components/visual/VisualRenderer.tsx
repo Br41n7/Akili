@@ -76,9 +76,9 @@ function Shell({ spec, ai, onAnswer, onSimplify, simplifying }: { spec: VisualSp
     setActiveView(spec.view); setStruggling(false); autoRemediation.current = false;
     return () => { if (remediationTimer.current !== null) window.clearTimeout(remediationTimer.current); remediationTimer.current = null; };
   }, [spec]);
-  useEffect(() => { setExplanation(buildExplanation(effectiveSpec)); }, [effectiveSpec]);
-
   const effectiveSpec = useMemo(() => applyViewVariant(spec, activeView), [spec, activeView]);
+
+  useEffect(() => { setExplanation(buildExplanation(effectiveSpec)); }, [effectiveSpec]);
   const map = elementMap(effectiveSpec);
   const interactions = new Set(effectiveSpec.interactions);
   const canSelect = interactions.has('select');
