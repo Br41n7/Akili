@@ -20,6 +20,7 @@ import Materials from '@/components/Materials';
 import LearningProgress from '@/components/LearningProgress';
 import ResearchLab from '@/components/ResearchLab';
 import QuickNoteModal from '@/components/QuickNoteModal';
+import ProjectSidebar from '@/components/ProjectSidebar';
 
 type Tab = 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'ask' | 'analysis' | 'progress' | 'research';
 
@@ -112,7 +113,9 @@ export default function ProjectPage() {
   const subject = projectSubject(project);
 
   return (
-    <div className="flex min-h-dvh flex-col">
+    <div className="flex min-h-dvh">
+      <ProjectSidebar items={TABS} active={tab} onSelect={setTab} projectName={project.name} />
+      <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
       <header className="pt-safe sticky top-0 z-40 border-b border-rule bg-paper">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-1 px-2">
           <Link href="/projects" aria-label="Back to projects" className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-ink/5 active:bg-ink/10">
@@ -128,7 +131,7 @@ export default function ProjectPage() {
         </div>
 
         {/* Tablet and desktop: every tab in one row */}
-        <nav aria-label="Project sections" className="no-scrollbar mx-auto hidden max-w-3xl gap-1 overflow-x-auto px-3 pb-2 md:flex">
+        <nav aria-label="Project sections" className="no-scrollbar mx-auto hidden max-w-3xl gap-1 overflow-x-auto px-3 pb-2 md:flex lg:hidden">
           {TABS.map(t => (
             <button
               key={t.id}
@@ -164,6 +167,7 @@ export default function ProjectPage() {
       </main>
 
       <QuickNoteModal projectId={projectId} userId={user.id} />
+      </div>
 
       {/* Phone: bottom bar */}
       <nav aria-label="Project sections" className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-paper md:hidden">
