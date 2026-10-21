@@ -18,7 +18,9 @@
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type ProviderId = 'gemini' | 'groq' | 'openai' | 'deepseek';
+import { getTask, type ProviderId, type TaskSpec } from './ai-tasks';
+
+export type { ProviderId };
 export type AIFormat = 'json' | 'text';
 
 export interface AIImage { base64: string; mimeType: string }
@@ -31,6 +33,11 @@ export interface AIOptions {
   image?: AIImage;
   /** The learner's own Groq key. Tried first when present. */
   userGroqKey?: string;
+  /**
+   * Only use the learner's own key. Set by the route when the free daily allowance is
+   * used up, so a personal key can never spend the shared quota.
+   */
+  userKeyOnly?: boolean;
   /** Server-side override of provider order. Never take this from the client. */
   providerOrder?: string[];
   maxOutputTokens?: number;
@@ -53,6 +60,9 @@ export interface AIResult {
   usedUserKey: boolean;
   /** True when a personal key was supplied but rejected. */
   userKeyRejected: boolean;
+  /** How many attempts failed before this one succeeded. */
+  fallbacks: number;
+  durationMs: number;
 }
 
 export type AIErrorCode =
@@ -119,7 +129,7 @@ class ProviderFailure extends Error {
 }
 
 const TRANSIENT: FailureKind[] = ['rate_limit', 'timeout', 'server', 'network', 'empty', 'truncated'];
-const PERMANENT: FailureKind[] = ['blocked', 'bad_request', 'auth', 'model_missing'];
+// Permanent: blocked, bad_request, auth, model_missing. Never retried; auth also disables the provider for the call.
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Configuration
@@ -130,16 +140,6 @@ const envNumber = (name: string, fallback: number) => {
   const n = Number(env(name));
   return Number.isFinite(n) && n > 0 ? n : fallback;
 };
-
-/** Short, cheap tasks. Ask the model to think less. */
-const LOW_EFFORT_TASKS = new Set([
-  'adaptive_tutor', 'mnemonic', 'shortcut', 'fact', 'research_editor',
-  'adaptive_analysis', 'topic_analysis', 'confusion', 'exam_analysis', 'visual_explain',
-]);
-/** Bulk generation tasks: prefer Groq first to spare Gemini quota. */
-const GROQ_FIRST_TASKS = new Set(['course_builder', 'study_guide', 'slide_deck', 'mnemonic', 'shortcut']);
-/** Long structured outputs need more room and time. */
-const HEAVY_TASKS = new Set(['course_builder', 'study_guide', 'slide_deck']);
 
 const JSON_RULES =
   'OUTPUT FORMAT: Respond with a single valid JSON value only. No markdown fences and no commentary before or after it. Escape line breaks inside strings as \\n.';
@@ -158,7 +158,7 @@ const groqModels = (): string[] => {
   return Array.from(new Set([primary, fallback].filter(Boolean)));
 };
 
-interface Candidate {
+export interface Candidate {
   provider: ProviderId;
   model: string;
   apiKey: string;
@@ -170,7 +170,15 @@ function cleanUserKey(key?: string): string {
   return k.length >= 8 && k.length <= 200 && /^[\x21-\x7e]+$/.test(k) ? k : '';
 }
 
-function providerCandidates(provider: ProviderId, opts: AIOptions): Candidate[] {
+/** OpenAI models that accept images. An OPENAI_MODEL outside this list is skipped for image input. */
+const OPENAI_VISION = /^(gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-5|o1|o3|o4|chatgpt-4o)/;
+
+/**
+ * Which providers can take an image, and with which model. Gemini always can.
+ * Groq and OpenAI only when the configured model is known to support vision.
+ * DeepSeek never. Returns the models to try, or [] when the provider must be skipped.
+ */
+export function providerCandidates(provider: ProviderId, opts: Pick<AIOptions, 'image'>): Candidate[] {
   const wantsImage = !!opts.image;
   switch (provider) {
     case 'gemini': {
@@ -189,7 +197,10 @@ function providerCandidates(provider: ProviderId, opts: AIOptions): Candidate[] 
     }
     case 'openai': {
       const apiKey = env('OPENAI_API_KEY');
-      return apiKey ? [{ provider, model: env('OPENAI_MODEL') || 'gpt-4o-mini', apiKey, userKey: false }] : [];
+      if (!apiKey) return [];
+      const model = env('OPENAI_MODEL') || 'gpt-4o-mini';
+      if (wantsImage && !OPENAI_VISION.test(model)) return [];
+      return [{ provider, model, apiKey, userKey: false }];
     }
     case 'deepseek': {
       const apiKey = env('DEEPSEEK_API_KEY');
@@ -200,7 +211,7 @@ function providerCandidates(provider: ProviderId, opts: AIOptions): Candidate[] 
 
 const ALL_PROVIDERS: ProviderId[] = ['gemini', 'groq', 'openai', 'deepseek'];
 
-function providerOrder(opts: AIOptions): ProviderId[] {
+function providerOrder(opts: AIOptions, spec: TaskSpec): ProviderId[] {
   const parse = (list: string[]) =>
     list.map(x => x.trim().toLowerCase()).filter((x): x is ProviderId => (ALL_PROVIDERS as string[]).includes(x));
 
@@ -209,12 +220,10 @@ function providerOrder(opts: AIOptions): ProviderId[] {
   const fromEnv = parse(env('AI_PROVIDER_ORDER').split(','));
   if (fromEnv.length) return fromEnv;
 
-  if (opts.image) return ['gemini', 'openai', 'groq', 'deepseek'];
-  if (GROQ_FIRST_TASKS.has(opts.task)) return ['groq', 'gemini', 'openai', 'deepseek'];
-  return ['gemini', 'groq', 'openai', 'deepseek'];
+  return spec.providers;
 }
 
-function buildCandidates(opts: AIOptions): Candidate[] {
+function buildCandidates(opts: AIOptions, spec: TaskSpec): Candidate[] {
   const out: Candidate[] = [];
 
   // The learner's own key comes first: it uses their quota, not ours.
@@ -223,7 +232,9 @@ function buildCandidates(opts: AIOptions): Candidate[] {
     for (const model of groqModels()) out.push({ provider: 'groq', model, apiKey: userKey, userKey: true });
   }
 
-  for (const p of providerOrder(opts)) out.push(...providerCandidates(p, opts));
+  if (opts.userKeyOnly) return out;
+
+  for (const p of providerOrder(opts, spec)) out.push(...providerCandidates(p, opts));
 
   if (opts.deprioritize?.length) {
     const avoid = new Set(opts.deprioritize);
@@ -316,11 +327,11 @@ async function postJSON(
 // Provider calls
 // ─────────────────────────────────────────────────────────────────────────────
 
-function geminiThinkingLevel(task: string): 'low' | undefined {
+function geminiThinkingLevel(spec: TaskSpec): 'low' | undefined {
   const forced = env('GEMINI_THINKING_LEVEL').toLowerCase();
   if (forced === 'default' || forced === 'medium' || forced === 'high') return undefined; // provider default is medium
   if (forced === 'low') return 'low';
-  return LOW_EFFORT_TASKS.has(task) ? 'low' : undefined;
+  return spec.lowEffort ? 'low' : undefined;
 }
 
 async function callGemini(c: Candidate, o: AIOptions, timeoutMs: number): Promise<string> {
@@ -332,7 +343,7 @@ async function callGemini(c: Candidate, o: AIOptions, timeoutMs: number): Promis
   const generationConfig: Record<string, unknown> = {};
   if (o.maxOutputTokens) generationConfig.maxOutputTokens = o.maxOutputTokens;
   if (o.format === 'json') generationConfig.responseMimeType = 'application/json';
-  const level = geminiThinkingLevel(o.task);
+  const level = geminiThinkingLevel(getTask(o.task));
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(c.model)}:generateContent`;
   const headers = { 'x-goog-api-key': c.apiKey };
@@ -387,7 +398,7 @@ async function callChatCompletions(c: Candidate, o: AIOptions, timeoutMs: number
       ]
     : o.prompt;
 
-  const maxTokens = o.maxOutputTokens ?? envNumber('AI_MAX_OUTPUT_TOKENS', HEAVY_TASKS.has(o.task) ? 16000 : 8000);
+  const maxTokens = o.maxOutputTokens ?? envNumber('AI_MAX_OUTPUT_TOKENS', getTask(o.task).heavy ? 16000 : 8000);
   const build = (withReasoning: boolean) => ({
     model: c.model,
     messages: [{ role: 'system', content: system }, { role: 'user', content: userContent }],
@@ -451,38 +462,53 @@ function callProvider(c: Candidate, o: AIOptions, timeoutMs: number): Promise<st
 const MIN_ATTEMPT_MS = 4_000;
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-function attemptTimeout(o: AIOptions): number {
+function attemptTimeout(o: AIOptions, spec: TaskSpec): number {
   if (o.timeoutMs) return o.timeoutMs;
-  const base = envNumber('AI_TIMEOUT_MS', 45_000);
-  return HEAVY_TASKS.has(o.task) ? Math.max(base, 75_000) : base;
+  const override = envNumber('AI_TIMEOUT_MS', 0);
+  if (!override) return spec.timeoutMs;
+  return spec.heavy ? Math.max(override, spec.timeoutMs) : override;
+}
+
+/** Transient kinds worth one more try on the same provider. Rate limits and timeouts move on instead. */
+const RETRY_SAME: FailureKind[] = TRANSIENT.filter(k => k !== 'rate_limit' && k !== 'timeout' && k !== 'truncated');
+
+/** One safe line per call: no prompts, no document text, no provider error bodies. */
+function logCall(f: { task: string; ok: boolean; provider?: ProviderId; model?: string; ms: number; fallbacks: number; failures: FailureKind[] }) {
+  const line = JSON.stringify({ task: f.task, ok: f.ok, provider: f.provider, model: f.model, ms: f.ms, fallbacks: f.fallbacks, failures: f.failures });
+  (f.ok ? console.info : console.error)(`[ai] ${line}`);
 }
 
 export async function runAIDetailed(opts: AIOptions): Promise<AIResult> {
-  const deadline = opts.deadline ?? Date.now() + (opts.budgetMs ?? envNumber('AI_TOTAL_BUDGET_MS', 105_000));
-  const all = buildCandidates(opts);
+  const started = Date.now();
+  const spec = getTask(opts.task);
+  const deadline = opts.deadline ?? started + (opts.budgetMs ?? envNumber('AI_TOTAL_BUDGET_MS', 105_000));
+  const all = buildCandidates(opts, spec);
   if (!all.length) {
-    console.error('[ai] No provider is configured. Set GEMINI_API_KEY and/or GROQ_API_KEY.');
-    throw new AIServiceError('AI_NOT_CONFIGURED', 'no provider keys');
+    console.error(`[ai] No eligible provider for task "${opts.task}"${opts.image ? ' with an image' : ''}. Check provider keys and vision models.`);
+    throw new AIServiceError('AI_NOT_CONFIGURED', 'no eligible provider');
   }
 
   const failures: { c: Candidate; f: ProviderFailure }[] = [];
-  const dropped = new Set<string>();
+  const deadProviders = new Set<string>();
   let userKeyRejected = false;
+  const maxTries = 1 + Math.max(0, spec.retries);
 
-  for (let pass = 1; pass <= 2; pass++) {
-    // Healthy candidates first; ones on cooldown are a last resort, never excluded outright.
-    const usable = all.filter(c => !dropped.has(candidateKey(c)));
-    const pool = [...usable.filter(c => !isCoolingDown(c)), ...usable.filter(isCoolingDown)];
-    if (!pool.length) break;
+  // Healthy candidates first; ones on cooldown are a last resort, never excluded outright.
+  const pool = [...all.filter(c => !isCoolingDown(c)), ...all.filter(isCoolingDown)];
 
-    for (const c of pool) {
+  candidates: for (const c of pool) {
+    const providerKey = `${c.provider}:${c.userKey ? 'user' : 'server'}`;
+    for (let attempt = 1; attempt <= maxTries; attempt++) {
+      if (deadProviders.has(providerKey)) break;
       const remaining = deadline - Date.now();
-      if (remaining < MIN_ATTEMPT_MS) break;
-      const timeout = Math.min(attemptTimeout(opts), remaining - 250);
+      if (remaining < MIN_ATTEMPT_MS) break candidates;
+      const timeout = Math.min(attemptTimeout(opts, spec), remaining - 250);
 
       try {
         const text = await callProvider(c, opts, timeout);
-        return { text, provider: c.provider, model: c.model, usedUserKey: c.userKey, userKeyRejected };
+        const durationMs = Date.now() - started;
+        logCall({ task: opts.task, ok: true, provider: c.provider, model: c.model, ms: durationMs, fallbacks: failures.length, failures: failures.map(x => x.f.kind) });
+        return { text, provider: c.provider, model: c.model, usedUserKey: c.userKey, userKeyRejected, fallbacks: failures.length, durationMs };
       } catch (err) {
         const f = err instanceof ProviderFailure
           ? err
@@ -492,20 +518,24 @@ export async function runAIDetailed(opts: AIOptions): Promise<AIResult> {
         failures.push({ c, f });
         tripCooldown(c, f);
         if (c.userKey && f.kind === 'auth') userKeyRejected = true;
-        if (PERMANENT.includes(f.kind)) dropped.add(candidateKey(c));
-        console.warn(`[ai] ${c.provider}/${c.model}${c.userKey ? ' (user key)' : ''} failed: ${f.kind}${f.status ? ` ${f.status}` : ''} ${f.detail}`);
+        // A bad key fails for every model of that provider, so skip the rest of them.
+        if (f.kind === 'auth') deadProviders.add(providerKey);
+        // Only the failure category is logged here. The provider's error body stays out of logs.
+        console.warn(`[ai] ${c.provider}/${c.model}${c.userKey ? ' (user key)' : ''} failed: ${f.kind}${f.status ? ` ${f.status}` : ''}`);
+
+        const backoff = 400 * attempt;
+        if (RETRY_SAME.includes(f.kind) && attempt < maxTries && deadline - Date.now() > MIN_ATTEMPT_MS + backoff) {
+          await sleep(backoff);
+          continue;
+        }
+        break;
       }
     }
-
-    // A second pass only makes sense if something transient happened and there is time left.
-    const retryable = failures.some(x => TRANSIENT.includes(x.f.kind));
-    if (pass === 1 && retryable && deadline - Date.now() > MIN_ATTEMPT_MS + 800) await sleep(800);
-    else break;
   }
 
   const kinds = failures.map(x => x.f.kind);
   const detail = failures.map(x => `${x.c.provider}/${x.c.model}: ${x.f.kind}`).join('; ');
-  console.error(`[ai] All providers failed for task "${opts.task}": ${detail || 'no time left'}`);
+  logCall({ task: opts.task, ok: false, ms: Date.now() - started, fallbacks: failures.length, failures: kinds });
 
   if (!failures.length) throw new AIServiceError('AI_TIMEOUT', 'budget exhausted');
   if (kinds.every(k => k === 'auth' || k === 'model_missing')) throw new AIServiceError('AI_NOT_CONFIGURED', detail);

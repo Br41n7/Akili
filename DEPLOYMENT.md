@@ -26,7 +26,7 @@ Both apps share **one Supabase project**. Do this once.
 
 ### Run the Schema
 1. In your Supabase project → SQL Editor → New Query
-2. Open `supabase-schema.sql` from either repo (they're identical)
+2. Open `supabase/migrations/0001_schema.sql` from either repo (they're identical)
 3. Paste the full content → Click Run
 4. You should see "Success. No rows returned" — that's correct
 

@@ -5,6 +5,7 @@
  * gaps (missing ids, option letters, answer format) and rejects output the UI
  * could not render. Rejected output triggers a regeneration in `runAIJSON`.
  */
+import { z } from 'zod';
 import type { Validation } from '@/lib/ai';
 import { validateVisualDecision } from '@/lib/visual/schema';
 
@@ -226,7 +227,81 @@ const examAnalysis = (data: unknown): Validation<Obj> => {
 const anyJSON = (data: unknown): Validation<unknown> =>
   data !== null && typeof data === 'object' ? ok(data) : fail('expected a JSON object or array');
 
-const VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
+// ─────────────────────────────────────────────────────────────────────────────
+// Zod contracts
+//
+// The normalizers above repair harmless gaps. These schemas then state what the
+// UI may rely on, so a drift between the two shows up as a rejected output (and
+// a regeneration) rather than a broken screen.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const zText = z.string();
+const zList = z.array(z.string());
+
+export const QuestionSchema = z.object({
+  id: z.string().min(1),
+  type: z.string().min(1),
+  question: z.string().min(1),
+  options: zList.optional(),
+  correct_answer: z.string().min(1),
+  explanation: zText,
+  concept: zText,
+  cognitive_level: zText,
+}).passthrough();
+
+export const LessonSchema = z.object({
+  id: z.string().min(1),
+  lesson_number: z.number().int().positive(),
+  title: z.string().min(1),
+  content: z.string().min(40),
+  learning_objectives: zList,
+  key_concepts: zList,
+  common_mistakes: zList,
+  worked_example: z.object({ problem: z.string().min(1), solution_steps: zList, answer: zText }).nullable(),
+  practice_questions: z.array(QuestionSchema),
+}).passthrough();
+
+export const CourseSchema = z.object({
+  title: z.string().min(1),
+  description: zText,
+  estimated_duration: zText,
+  modules: z.array(z.object({
+    id: z.string().min(1),
+    module_number: z.number().int().positive(),
+    title: z.string().min(1),
+    estimated_time: zText,
+    lessons: z.array(LessonSchema).min(1),
+  }).passthrough()).min(1),
+}).passthrough();
+
+const questionsSchema = (min: number) => z.object({ questions: z.array(QuestionSchema).min(min) }).passthrough();
+
+export const SCHEMAS: Record<string, z.ZodTypeAny> = {
+  course: CourseSchema,
+  quiz: questionsSchema(3),
+  exam: questionsSchema(5),
+  quick_check: questionsSchema(1),
+  flashcard: z.object({ mnemonic: z.string().min(1), explanation: zText }).passthrough(),
+  visual_explain: z.object({ summary: z.string().min(10), parts: z.array(z.object({ id: z.string().min(1), text: z.string().min(1) })) }).passthrough(),
+  fact: z.object({ type: zText, title: zText, fact: z.string().min(1) }).passthrough(),
+  research_edit: z.object({ text: z.string().min(10), changes: zList }).passthrough(),
+  quiz_analysis: z.object({ summary: zText, evidence: z.array(z.unknown()), next_focus: zList, ready_to_advance: z.boolean() }).passthrough(),
+  exam_analysis: z.object({ overall_verdict: z.string().min(1), weak_concepts: zList, strong_concepts: zList, recommendations: zList }).passthrough(),
+};
+
+/** Run the normalizer, then hold its output to the Zod contract. */
+export function withSchema(name: string, schema: z.ZodTypeAny, normalize: (data: unknown) => Validation<unknown>) {
+  return (data: unknown): Validation<unknown> => {
+    const v = normalize(data);
+    if (!v.ok) return v;
+    const parsed = schema.safeParse(v.data);
+    if (parsed.success) return v;
+    const issue = parsed.error.issues[0];
+    return fail(`${name}: ${issue?.path.join('.') || 'value'} ${issue?.message || 'is invalid'}`);
+  };
+}
+
+const RAW_VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
   course: normalizeCourse,
   quiz: questionSet(3, 'q'),
   exam: questionSet(5, 'q'),
@@ -240,6 +315,10 @@ const VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
   quiz_analysis: quizAnalysis,
   exam_analysis: examAnalysis,
 };
+
+const VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = Object.fromEntries(
+  Object.entries(RAW_VALIDATORS).map(([name, fn]) => [name, SCHEMAS[name] ? withSchema(name, SCHEMAS[name], fn) : fn]),
+);
 
 export const VALIDATION_TYPES = Object.keys(VALIDATORS);
 

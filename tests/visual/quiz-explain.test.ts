@@ -206,8 +206,6 @@ describe('11. "Explain this diagram" only explains what is in the spec', () => {
   });
 });
 
-import { resolveTap } from '@/lib/visual/quiz';
-
 describe('"Tap the structure" questions', () => {
   const tapsFor = (spec: VisualSpec, seeds = ['a', 'b', 'c', 'd', 'e', 'f']) =>
     seeds.flatMap(seed => buildVisualQuestions(spec, { max: 60, seed }).filter(q => q.kind === 'tap'));

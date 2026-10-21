@@ -19,7 +19,7 @@ npm test
 npm run build
 ```
 
-Review and apply `supabase-notes-migration.sql` in the Supabase SQL editor if the offline-notes feature requires its schema changes. Back up the existing database before applying migrations. Do not commit `.env` secrets.
+Review and apply `supabase/migrations/0003_notes.sql` in the Supabase SQL editor if the offline-notes feature requires its schema changes. Back up the existing database before applying migrations. Do not commit `.env` secrets.
 
 ## Merge caveat
 Overlapping implementations cannot always be combined mechanically without regression risk. In particular, the materials component comes from Akiliv3 while course/quiz/exam components come from the visual-engine-corrected branch. The merged project should be treated as a candidate integration build until the checks above pass.

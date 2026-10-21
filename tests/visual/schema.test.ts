@@ -104,7 +104,7 @@ describe('10. invalid AI VisualSpec is rejected, never rendered', () => {
   it('defaults missing interaction metadata to safe capabilities and validates alternate views', () => {
     const base = clone(F.kneeJoint);
     delete base.interactions;
-    const d = parseVisualSpec({ ...base, view_variants: [{ view: 'posterior', axes: { top: 'superior', bottom: 'inferior', left: 'medial', right: 'lateral' }, positions: base.elements.map((e: any) => ({ id: e.id, pos: e.pos ?? { x: 4, y: 4 } })) }] });
+    const d = parseVisualSpec({ ...base, view_variants: [{ view: 'posterior', axes: { top: 'superior', bottom: 'inferior', left: 'medial', right: 'lateral' }, positions: base.elements.map((e: any) => { const p = e.pos ?? { x: 4, y: 4 }; return { id: e.id, pos: { x: 8 - p.x, y: p.y } }; }) }] });
     expect(d.ok).toBe(true);
     if (d.ok) {
       expect(d.data.interactions).toContain('select');

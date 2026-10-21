@@ -36,7 +36,7 @@
 
 ## Database
 Run in Supabase SQL Editor after the existing schema/migrations:
-1. `supabase-adaptive-migration.sql`
-2. `supabase-security-fix-migration.sql`
+1. `supabase/migrations/0002_adaptive.sql`
+2. `supabase/migrations/0005_security_hardening.sql`
 
 The security migration removes broad thumbnail listing, fixes SECURITY DEFINER search paths, restricts RPC execution, and adds project-ownership defense in the adaptive RPC.

@@ -3,7 +3,9 @@ import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { runAIDetailed, runAIJSON, toPublicError, AIServiceError } from '@/lib/ai';
-import { getValidator } from '@/lib/ai-schemas';
+import { getValidator, VALIDATION_TYPES } from '@/lib/ai-schemas';
+import { getTask, isKnownTask, PERSONA_IDS } from '@/lib/ai-tasks';
+import { FREE_DAILY_LIMIT, planQuota, recordUsage } from '@/lib/ai-quota';
 import { buildCulturalBlock } from '@/lib/cultural';
 import { buildProjectContext, type ProjectRecord } from '@/lib/project-context';
 
@@ -12,7 +14,6 @@ export const maxDuration = 120;
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const FREE_DAILY_LIMIT = 20;
 const MAX_PROMPT_CHARS = 24000;
 const MAX_IMAGE_BASE64 = 8 * 1024 * 1024 * 1.4;
 const RATE_STORE = new Map<string, { count: number; reset: number }>();
@@ -64,20 +65,28 @@ export async function POST(req: NextRequest) {
     try { raw = await req.json(); } catch { return fail('That request could not be read.', 400); }
     const parsed = bodySchema.safeParse(raw);
     if (!parsed.success) return fail(parsed.error.issues[0]?.message || 'Invalid request.', 400);
-    const { task, prompt, systemInstruction, format, persona, region, image, userGroqKey, validationType, projectId } = parsed.data;
+    const { task, prompt, systemInstruction, format, persona: personaInput, region, image, userGroqKey, validationType: requestedValidation, projectId } = parsed.data;
 
-    // Daily allowance. Learners using their own key are not limited.
+    // Only tasks in the registry run, and each task says whether it takes an image.
+    if (!isKnownTask(task)) return fail('That request is not supported.', 400, 'UNKNOWN_TASK');
+    const spec = getTask(task);
+    if (spec.input === 'text' && image) return fail('This request does not accept an image.', 400, 'IMAGE_NOT_SUPPORTED');
+    if (spec.input === 'image' && !image) return fail('Please attach an image.', 400, 'IMAGE_REQUIRED');
+
+    // Personas are a fixed list. Anything else is treated as the default, never pasted into the prompt.
+    const persona = (PERSONA_IDS as readonly string[]).includes(personaInput) ? personaInput : 'friendly';
+    const validationType = requestedValidation && VALIDATION_TYPES.includes(requestedValidation) ? requestedValidation : spec.validation;
+
+    // Daily allowance. A personal key is not trusted until a provider accepts it: once the
+    // free allowance is spent, such a request may use that key only, never the shared ones.
     const hasOwnKey = !!userGroqKey?.trim();
     const today = new Date().toISOString().split('T')[0];
-    let usedToday = 0;
-    if (!hasOwnKey) {
-      const { data: usage } = await supabaseAdmin
-        .from('ai_usage').select('count').eq('user_id', user.id).eq('usage_date', today).maybeSingle();
-      usedToday = usage?.count ?? 0;
-      if (usedToday >= FREE_DAILY_LIMIT) {
-        return fail(`You have used all ${FREE_DAILY_LIMIT} free AI requests for today. They reset at midnight.`, 429, 'DAILY_LIMIT');
-      }
-    }
+    const { data: usage } = await supabaseAdmin
+      .from('ai_usage').select('count').eq('user_id', user.id).eq('usage_date', today).maybeSingle();
+    const usedToday = usage?.count ?? 0;
+    const quota = planQuota({ usedToday, hasOwnKey });
+    const limitMessage = `You have used all ${FREE_DAILY_LIMIT} free AI requests for today. They reset at midnight.`;
+    if (!quota.allow) return fail(limitMessage, 429, 'DAILY_LIMIT');
 
     // Project context is loaded on the server so the client cannot spoof it.
     let projectBlock = '';
@@ -98,34 +107,34 @@ export async function POST(req: NextRequest) {
       systemInstruction,
     ].filter(Boolean).join('\n\n');
 
-    const options = { task, prompt, system, format, image, userGroqKey, signal: req.signal } as const;
-    const started = Date.now();
+    const options = { task, prompt, system, format, image, userGroqKey, userKeyOnly: quota.userKeyOnly, signal: req.signal } as const;
 
     let result: string;
     let usedOwnKey = false;
     let keyRejected = false;
 
-    if (format === 'json') {
-      const out = await runAIJSON(options, getValidator(validationType));
-      result = JSON.stringify(out.data);
-      usedOwnKey = out.usedUserKey;
-      keyRejected = out.userKeyRejected;
-      console.info(`[ai] task=${task} ok ms=${Date.now() - started} provider=${out.provider}`);
-    } else {
-      const out = await runAIDetailed(options);
-      result = out.text;
-      usedOwnKey = out.usedUserKey;
-      keyRejected = out.userKeyRejected;
-      console.info(`[ai] task=${task} ok ms=${Date.now() - started} provider=${out.provider}`);
+    try {
+      if (format === 'json') {
+        const out = await runAIJSON(options, getValidator(validationType));
+        result = JSON.stringify(out.data);
+        usedOwnKey = out.usedUserKey;
+        keyRejected = out.userKeyRejected;
+      } else {
+        const out = await runAIDetailed(options);
+        result = out.text;
+        usedOwnKey = out.usedUserKey;
+        keyRejected = out.userKeyRejected;
+      }
+    } catch (err) {
+      // Allowance spent and the personal key did not work: say so, instead of "AI unavailable".
+      if (quota.userKeyOnly && err instanceof AIServiceError && err.code === 'AI_NOT_CONFIGURED') {
+        return fail(limitMessage, 429, 'DAILY_LIMIT');
+      }
+      throw err;
     }
 
-    // Count only requests that produced an answer. If a learner's own key failed and we
-    // answered with ours, that request counts against their allowance.
-    if (!usedOwnKey) {
-      await supabaseAdmin
-        .from('ai_usage')
-        .upsert({ user_id: user.id, usage_date: today, count: usedToday + 1 }, { onConflict: 'user_id,usage_date' });
-    }
+    // Count only requests that produced an answer, and only when the shared providers answered.
+    if (!usedOwnKey) await recordUsage(supabaseAdmin, user.id, today, usedToday);
 
     return NextResponse.json({ result, ...(keyRejected ? { keyRejected: true } : {}) });
   } catch (err) {

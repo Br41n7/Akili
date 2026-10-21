@@ -3,7 +3,7 @@
 This update connects Ask AI, Course practice, Quiz Mode, and Exam Mode to a persistent learner model.
 
 ## Database
-Run `supabase-adaptive-migration.sql` in the Supabase SQL Editor after the existing Akili schema. It creates:
+Run `supabase/migrations/0002_adaptive.sql` in the Supabase SQL Editor after the existing Akili schema. It creates:
 
 - `learner_concepts` — current concept-level learning state
 - `learning_evidence` — evidence from chat/practice/quiz/exam/lesson interactions
@@ -26,7 +26,7 @@ Mastery values are heuristic product signals, not scientifically validated measu
 
 ## Suggested rollout
 
-1. Apply `supabase-adaptive-migration.sql`.
+1. Apply `supabase/migrations/0002_adaptive.sql`.
 2. Deploy the updated application.
 3. Test a project with a small amount of material.
 4. Ask a question in Ask AI, run a quick check, then run an adaptive quiz.

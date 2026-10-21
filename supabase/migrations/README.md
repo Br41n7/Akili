@@ -1,0 +1,15 @@
+# Supabase migrations
+
+Apply in numeric order in the Supabase SQL editor (or `supabase db push`).
+Back up the database first. Files `0002` onward are written to be re-runnable.
+
+| File | Purpose |
+| --- | --- |
+| 0001_schema.sql | Base schema (formerly `supabase-schema.sql`) |
+| 0002_adaptive.sql | Learner concepts, evidence, facts, notes |
+| 0003_notes.sql | Note titles and updated_at |
+| 0004_project_context.sql | Education level and exam context on projects |
+| 0005_security_hardening.sql | Storage policy and function privilege fixes |
+| 0006_ai_usage_atomic.sql | Atomic daily AI quota function |
+
+`o.sql` was removed: every statement in it already exists in `0002_adaptive.sql`.

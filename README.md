@@ -13,7 +13,7 @@ Upload notes, import PastQ question banks, get AI-built courses tailored to your
 
 ### 1. Supabase
 **Use the same Supabase project as PastQ.**
-The schema is already set up if you ran `supabase-schema.sql` for PastQ.
+The schema is already set up if you ran `supabase/migrations/0001_schema.sql` for PastQ.
 
 ### 2. AI Keys
 - **Gemini**: aistudio.google.com → Get API Key (free)
