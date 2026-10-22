@@ -7,7 +7,7 @@
 - Updated Next.js 15 config from `experimental.serverComponentsExternalPackages` to `serverExternalPackages`.
 
 ## Learning features
-- Adaptive quiz supports English and German.
+- Adaptive quiz is English only. Question types (multiple choice, fill in the gap, I/II/III/IV statements, theory) and the number of questions are chosen under "More options".
 - Fill-in-the-gap questions are scored locally without another AI call.
 - Quiz performance is summarized locally first; AI misconception analysis is only requested when repeated failures justify it.
 - AI can generate a visual question from a structured diagram specification. The app renders a safe schematic SVG for skull, heart, cell, and generic concepts.

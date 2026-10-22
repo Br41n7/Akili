@@ -4,12 +4,14 @@ import { supabase } from '@/lib/supabase';
 import { callAIJSON, errorMessage } from '@/lib/utils';
 import { compactLearnerContext, getLearnerContext, recordEvidence } from '@/lib/adaptive';
 import { summarizeAssessment } from '@/lib/local-learning';
+import QuizSettings from '@/components/QuizSettings';
+import { DEFAULT_QUESTIONS, QUESTION_TYPES, buildQuizPrompt, clampCount, isAnswerCorrect, shapeQuestions, theoryFraction, type QuizQuestionType, type TheoryMarks } from '@/lib/quiz-config';
 import ConceptVisual from '@/components/visual/ConceptVisual';
 import GeneratedDiagram, { type GeneratedDiagramSpec } from '@/components/GeneratedDiagram';
-import { ArrowRight, Brain, ImagePlus, RotateCcw, Sparkles, X } from 'lucide-react';
+import { ArrowRight, Brain, Check, ImagePlus, RotateCcw, Sparkles, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
-  Button, ChoiceChips, Chip, ErrorState, Field, GeneratingPanel, OptionRow, ProgressBar, SelectInput, Surface, TextInput, splitOption, type OptionState,
+  Button, ChoiceChips, Chip, ErrorState, Field, GeneratingPanel, OptionRow, ProgressBar, Surface, TextArea, TextInput, splitOption, type OptionState,
 } from '@/components/ui';
 
 interface Props { projectId: string; userId: string; region: string; persona: string; onGoToMaterials?: () => void }
@@ -17,19 +19,16 @@ interface Props { projectId: string; userId: string; region: string; persona: st
 type Phase = 'setup' | 'generating' | 'quiz' | 'results';
 type Difficulty = 'easy' | 'medium' | 'hard';
 
-const isRight = (q: any, answer?: string) =>
-  q.type === 'fill_gap'
-    ? (answer || '').trim().toLowerCase() === String(q.correct_answer).trim().toLowerCase()
-    : answer === q.correct_answer;
-
 const STEPS = ['Reading your materials', 'Checking what you already know', 'Writing questions', 'Checking the answers'];
 
 export default function QuizMode({ projectId, userId, region, persona }: Props) {
   const [phase, setPhase] = useState<Phase>('setup');
   const [topic, setTopic] = useState('');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
-  const [language, setLanguage] = useState('English');
-  const [questionStyle, setQuestionStyle] = useState('mixed');
+  const [types, setTypes] = useState<QuizQuestionType[]>(['multiple_choice', 'fill_gap']);
+  const [count, setCount] = useState(DEFAULT_QUESTIONS);
+  const [theoryMarks, setTheoryMarks] = useState<TheoryMarks>({});
+  const [markingId, setMarkingId] = useState<string | null>(null);
   const [diagram, setDiagram] = useState<{ base64: string; mimeType: string } | null>(null);
   const [generatedDiagram, setGeneratedDiagram] = useState<GeneratedDiagramSpec | null>(null);
 
@@ -55,7 +54,7 @@ export default function QuizMode({ projectId, userId, region, persona }: Props) 
   };
 
   const reset = () => {
-    setQuestions([]); setAnswers({}); setIndex(0); setRevealed(false); setSummary(null); setError('');
+    setQuestions([]); setAnswers({}); setIndex(0); setRevealed(false); setSummary(null); setError(''); setTheoryMarks({});
     setPhase('setup');
   };
 
@@ -68,7 +67,7 @@ export default function QuizMode({ projectId, userId, region, persona }: Props) 
   };
 
   const start = async (visual: boolean) => {
-    setPhase('generating'); setError(''); setQuestions([]); setAnswers({}); setIndex(0); setRevealed(false); setSummary(null);
+    setPhase('generating'); setError(''); setQuestions([]); setAnswers({}); setIndex(0); setRevealed(false); setSummary(null); setTheoryMarks({});
     if (!visual) setGeneratedDiagram(null);
     try {
       if (visual) {
@@ -85,26 +84,16 @@ Use a topic-appropriate schematic, not a generic placeholder when a specific str
         setQuestions([{ ...data, id: `visual-${Date.now()}`, type: 'diagram' }]);
       } else {
         const { context, adaptive } = await loadContext(3, 6000);
-        const prompt = `Generate 5 adaptive questions about "${topic || 'the main topics'}" at ${difficulty} difficulty.
-${context ? `Based on this material:\n${context}` : 'No material was supplied; use the standard syllabus for the learner’s level.'}
-
-Language: ${language}. Write questions, options and feedback in ${language}.
-Question style: ${questionStyle}.
-Adaptive learner context (evidence, not absolute truth): ${JSON.stringify(adaptive)}
-Prioritize weak concepts when the topic is blank. Test understanding, not sentence copying.
-
-Supported types:
-- multiple_choice: four options A-D, correct_answer is the letter
-- fill_gap: a complete sentence with one blank shown as □□□; correct_answer is the missing word or phrase
-- diagram: only when an image is supplied; ask about a labelled structure that is visible, and do not invent labels
-
-Cognitive levels: recall, understanding, application, debugging, transfer.
-Return JSON: { "questions": [{ "id": string, "type": "multiple_choice"|"fill_gap"|"diagram", "question": string, "options": ["A) ...","B) ...","C) ...","D) ..."], "correct_answer": string, "explanation": string, "concept": string, "cognitive_level": string }] }`;
+        const wanted = clampCount(count);
+        const prompt = buildQuizPrompt({ topic, difficulty, count: wanted, types, hasImage: !!diagram, context, adaptive });
         const data = await callAIJSON<any>({
           task: diagram ? 'diagram_question' : 'adaptive_quiz', prompt, region, persona, projectId,
-          image: diagram || undefined, validationType: 'quiz',
+          image: diagram || undefined, validationType: 'quiz_custom',
         });
-        setQuestions(data.questions);
+        const shaped = shapeQuestions<any>(data.questions, { count: wanted, types, hasImage: !!diagram });
+        if (!shaped.length) throw new Error('The AI did not return the question types you chose. Please try again.');
+        if (shaped.length < wanted) toast(`Built ${shaped.length} of ${wanted} questions.`);
+        setQuestions(shaped);
       }
       setPhase('quiz');
     } catch (err) {
@@ -113,15 +102,41 @@ Return JSON: { "questions": [{ "id": string, "type": "multiple_choice"|"fill_gap
     }
   };
 
+  const isRight = (q: any) => isAnswerCorrect(q, answers[q.id], theoryMarks);
+
+  const markWithAI = async (q: any) => {
+    setMarkingId(q.id);
+    try {
+      const prompt = `Mark this learner's written answer against the marking points. Be fair and strict: a point is covered only if the answer clearly says it, in any wording.
+Question: ${q.question}
+Marking points (numbered from 0):
+${q.marking_points.map((p: string, i: number) => `${i}. ${p}`).join('\n')}
+Learner's answer: ${(answers[q.id] || '').slice(0, 3000)}
+Return JSON: { "covered": [indexes of the points the answer covers], "feedback": string (two sentences at most), "improvement": string (one sentence on the most important missing idea) }`;
+      const data = await callAIJSON<any>({ task: 'theory_feedback', prompt, region, persona, projectId, validationType: 'theory_feedback' });
+      const covered = (data.covered as number[]).filter(i => i < q.marking_points.length);
+      setTheoryMarks(m => ({ ...m, [q.id]: { covered, ai: true, feedback: [data.feedback, data.improvement].filter(Boolean).join(' ') } }));
+    } catch (err) {
+      toast.error(errorMessage(err, 'AI marking is not available right now. Tick the points you covered instead.'));
+    } finally {
+      setMarkingId(null);
+    }
+  };
+
+  const toggleCovered = (q: any, i: number) => setTheoryMarks(m => {
+    const covered = m[q.id]?.covered || [];
+    return { ...m, [q.id]: { ...m[q.id], covered: covered.includes(i) ? covered.filter(x => x !== i) : [...covered, i] } };
+  });
+
   const finish = async () => {
     setPhase('results');
     setAnalyzing(true);
-    const score = questions.filter(q => isRight(q, answers[q.id])).length;
+    const score = questions.filter(q => isRight(q)).length;
     try {
-      const local = summarizeAssessment(questions, answers);
+      const local = summarizeAssessment(questions, answers, theoryMarks);
       let analysis: any = {
         summary: 'Assessment summarized from your answers.',
-        evidence: questions.map(q => ({ concept: q.concept || topic || 'General', correct: isRight(q, answers[q.id]), confidence: 0.6, misconception: null, note: 'Assessment evidence.' })),
+        evidence: questions.map(q => ({ concept: q.concept || topic || 'General', correct: isRight(q), confidence: 0.6, misconception: null, note: 'Assessment evidence.' })),
         next_focus: local.next_focus,
         ready_to_advance: local.weak_concepts.length === 0,
       };
@@ -139,7 +154,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
       setSummary(analysis);
 
       for (const q of questions) {
-        const ok = isRight(q, answers[q.id]);
+        const ok = isRight(q);
         const ev = analysis.evidence?.find((e: any) => e.concept?.toLowerCase() === q.concept?.toLowerCase() && e.correct === ok);
         await recordEvidence({
           userId, projectId, concept: q.concept || topic || 'General', sourceType: 'quiz',
@@ -149,7 +164,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
           difficulty, misconception: ev?.misconception || null, evidence: ev?.note || q.explanation,
         });
       }
-      await supabase.from('exam_attempts').insert({ project_id: projectId, user_id: userId, type: 'quiz', questions, answers, score, total: questions.length, analysis });
+      await supabase.from('exam_attempts').insert({ project_id: projectId, user_id: userId, type: 'quiz', questions, answers, score, total: questions.length, analysis: { ...analysis, theory_marks: theoryMarks } });
     } catch {
       /* saving results must never block the learner from seeing them */
     } finally {
@@ -182,20 +197,14 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
           </div>
 
           <details className="group rounded-xl border border-rule">
-            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between px-4 text-sm font-semibold">
-              More options <span className="text-xs font-normal text-muted group-open:hidden">Language, style, diagram</span>
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold">
+              More options
+              <span className="truncate text-xs font-normal text-muted group-open:hidden">
+                {clampCount(count)} question{clampCount(count) === 1 ? '' : 's'} · {types.map(t => QUESTION_TYPES.find(x => x.value === t)!.label.replace(/ \(.*\)/, '')).join(', ')}
+              </span>
             </summary>
-            <div className="space-y-4 border-t border-rule p-4">
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Language" htmlFor="qz-lang">
-                  <SelectInput id="qz-lang" value={language} onChange={e => setLanguage(e.target.value)}><option>English</option><option>German</option></SelectInput>
-                </Field>
-                <Field label="Style" htmlFor="qz-style">
-                  <SelectInput id="qz-style" value={questionStyle} onChange={e => setQuestionStyle(e.target.value)}>
-                    <option value="mixed">Mixed</option><option value="fill_gap">Fill in the gap</option><option value="diagram">Diagram-based</option>
-                  </SelectInput>
-                </Field>
-              </div>
+            <div className="space-y-5 border-t border-rule p-4">
+              <QuizSettings types={types} onTypes={setTypes} count={count} onCount={setCount} />
               {diagram ? (
                 <div className="flex items-center gap-3 rounded-xl bg-chalk p-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -225,7 +234,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
     const q = questions[index];
     const answer = answers[q.id];
     const last = index === questions.length - 1;
-    const ok = isRight(q, answer);
+    const ok = isRight(q);
     const canCheck = !!(answer && answer.trim());
 
     return (
@@ -248,7 +257,54 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
           {q.concept && <Chip tone="biro">{q.concept}</Chip>}
           <h2 className="font-read text-[1.25rem] font-semibold leading-snug">{q.question}</h2>
 
-          {q.type === 'fill_gap' ? (
+          {q.type === 'statements' && Array.isArray(q.statements) && (
+            <ol className="space-y-1.5 rounded-xl bg-chalk p-3.5" aria-label="Statements">
+              {q.statements.map((st: string, i: number) => <li key={i} className="font-read text-base leading-relaxed">{st}</li>)}
+            </ol>
+          )}
+
+          {q.type === 'theory' ? (
+            <div className="space-y-3">
+              <TextArea
+                value={answer || ''}
+                disabled={revealed}
+                onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+                placeholder="Write your answer in a few sentences"
+                rows={6}
+                aria-label="Your answer"
+              />
+              {revealed && (
+                <div className="space-y-3 rounded-xl border border-rule bg-paper p-3.5">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-muted">Model answer</p>
+                    <p className="mt-1 font-read text-base leading-relaxed">{q.model_answer}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-wide text-muted">Tick the points your answer covered</p>
+                    <ul className="mt-1.5 space-y-1.5">
+                      {q.marking_points.map((pt: string, i: number) => {
+                        const on = !!theoryMarks[q.id]?.covered.includes(i);
+                        return (
+                          <li key={i}>
+                            <button type="button" role="checkbox" aria-checked={on} onClick={() => toggleCovered(q, i)}
+                              className={`flex min-h-11 w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-left text-sm ${on ? 'border-tick bg-tick-wash' : 'border-rule bg-paper'}`}>
+                              <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border ${on ? 'border-tick bg-tick text-white' : 'border-ink/30'}`}>{on && <Check size={13} />}</span>
+                              <span>{pt}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
+                  {theoryMarks[q.id]?.feedback && <p className="rounded-lg bg-biro-wash px-3 py-2 text-sm">{theoryMarks[q.id]!.feedback}</p>}
+                  <Button variant="quiet" size="sm" loading={markingId === q.id} disabled={!!markingId || !(answer && answer.trim())} onClick={() => markWithAI(q)}>
+                    <Sparkles size={15} /> Mark my answer with AI
+                  </Button>
+                  <p className="text-xs text-muted">{Math.round(theoryFraction(q, theoryMarks[q.id]) * 100)}% of points covered. Half or more counts as correct. AI marking uses one of your daily AI requests.</p>
+                </div>
+              )}
+            </div>
+          ) : q.type === 'fill_gap' ? (
             <div className="space-y-2">
               <TextInput
                 value={answer || ''}
@@ -259,7 +315,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
                 autoComplete="off"
                 aria-label="Your answer"
               />
-              {revealed && !ok && <p className="text-sm font-semibold text-tick">Correct answer: {q.correct_answer}</p>}
+              {revealed && !ok && <p className="text-sm font-semibold text-tick">Correct answer: {String(q.correct_answer).replace(/\s*\|\s*/g, ' / ')}</p>}
             </div>
           ) : (
             <div role="radiogroup" aria-label="Answer options" className="space-y-2">
@@ -273,7 +329,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
             </div>
           )}
 
-          {revealed && (
+          {revealed && q.type !== 'theory' && (
             <div role="status" className={`rounded-xl p-3.5 ${ok ? 'bg-tick-wash' : 'bg-redpen-wash'}`}>
               <p className={`text-sm font-bold ${ok ? 'text-tick' : 'text-redpen'}`}>{ok ? 'Correct' : 'Not quite'}</p>
               {q.explanation && <p className="mt-1 font-read text-base leading-relaxed text-ink">{q.explanation}</p>}
@@ -296,8 +352,8 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
 
   // ── Results ───────────────────────────────────────────────────────────────
 
-  const score = questions.filter(q => isRight(q, answers[q.id])).length;
-  const missed = questions.filter(q => !isRight(q, answers[q.id]));
+  const score = questions.filter(q => isRight(q)).length;
+  const missed = questions.filter(q => !isRight(q));
   const ratio = questions.length ? score / questions.length : 0;
 
   return (
@@ -327,7 +383,10 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
           {missed.map(q => (
             <Surface key={q.id} className="space-y-2 p-4">
               <p className="font-read text-base font-semibold leading-snug">{q.question}</p>
-              <p className="text-sm"><span className="font-semibold text-tick">Answer: </span>{q.type === 'fill_gap' ? q.correct_answer : (q.options?.find((o: string) => o.startsWith(`${q.correct_answer})`)) || q.correct_answer)}</p>
+              {q.type === 'statements' && Array.isArray(q.statements) && (
+                <ol className="space-y-1 text-sm">{q.statements.map((st: string, i: number) => <li key={i}>{st}</li>)}</ol>
+              )}
+              <p className="text-sm"><span className="font-semibold text-tick">Answer: </span>{q.type === 'fill_gap' ? String(q.correct_answer).split(/\s*\|\s*/)[0] : q.type === 'theory' ? q.model_answer : (q.options?.find((o: string) => o.startsWith(`${q.correct_answer})`)) || q.correct_answer)}</p>
               {q.explanation && <p className="text-sm leading-relaxed text-muted">{q.explanation}</p>}
               <ConceptVisual concept={q.concept || topic || 'this question'} text={`${q.question}\n${q.explanation || ''}`} projectId={projectId} userId={userId} region={region} persona={persona} />
             </Surface>

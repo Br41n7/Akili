@@ -74,3 +74,9 @@ export function formatDate(iso: string) {
 export function errorMessage(err: unknown, fallback = 'Something went wrong. Please try again.'): string {
   return err instanceof Error && err.message ? err.message : fallback;
 }
+
+/** Toggle `v` in a multi-select, never dropping below `min` selected. Keeps the order of `all`. */
+export function toggleSelection<T>(all: T[], value: T[], v: T, min = 1): T[] {
+  if (value.includes(v)) return value.length > min ? value.filter(x => x !== v) : value;
+  return all.filter(x => x === v || value.includes(x));
+}

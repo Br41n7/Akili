@@ -57,7 +57,7 @@ const list: TaskSpec[] = [
   { id: 'knowledge_graph', providers: GROQ_FIRST, input: 'text', validation: 'visual_spec', timeoutMs: BASE_MS, retries: 1 },
   { id: 'concept_battle', providers: GEMINI_FIRST, input: 'text', timeoutMs: BASE_MS, retries: 1 },
   { id: 'confusion', providers: GEMINI_FIRST, input: 'text', timeoutMs: BASE_MS, retries: 1, lowEffort: true },
-  { id: 'theory_feedback', providers: GEMINI_FIRST, input: 'text', timeoutMs: BASE_MS, retries: 1 },
+  { id: 'theory_feedback', providers: GEMINI_FIRST, input: 'text', validation: 'theory_feedback', timeoutMs: BASE_MS, retries: 1, lowEffort: true },
 
   // Images: only providers that can read them are ever tried.
   { id: 'snap_solve', providers: VISION, input: 'image', timeoutMs: BASE_MS, retries: 1 },
@@ -68,7 +68,8 @@ const list: TaskSpec[] = [
 
   // Existing tasks, order unchanged from before the registry.
   { id: 'adaptive_tutor', providers: GEMINI_FIRST, input: 'text', timeoutMs: BASE_MS, retries: 1, lowEffort: true },
-  { id: 'adaptive_quiz', providers: GEMINI_FIRST, input: 'text', validation: 'quick_check', timeoutMs: BASE_MS, retries: 1 },
+  // Custom-length quizzes (up to 30 questions) need the larger output budget.
+  { id: 'adaptive_quiz', providers: GEMINI_FIRST, input: 'text', validation: 'quiz_custom', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
   { id: 'adaptive_analysis', providers: GEMINI_FIRST, input: 'text', validation: 'quiz_analysis', timeoutMs: BASE_MS, retries: 1, lowEffort: true },
   { id: 'exam', providers: GEMINI_FIRST, input: 'text', validation: 'exam', timeoutMs: BASE_MS, retries: 1 },
   { id: 'exam_analysis', providers: GEMINI_FIRST, input: 'text', validation: 'exam_analysis', timeoutMs: BASE_MS, retries: 1, lowEffort: true },

@@ -1,4 +1,5 @@
 'use client';
+import LessonExtras from '@/components/LessonExtras';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { callAIJSON, cn, errorMessage } from '@/lib/utils';
@@ -107,6 +108,10 @@ Learner level and scope:
 Requirements:
 - Create 2 to 4 modules, each with 2 to 4 lessons, based only on topics actually present in the supplied materials.
 - Each lesson: learning objectives, ${secondary ? 'clear explanations of about 150–250 words' : 'a thorough explanation of about 250–350 words'} in markdown, key concepts, one worked example, common mistakes, and 3 practice questions.
+- Also per lesson, only where the supplied materials support them (use an empty array otherwise, never filler):
+  - "definitions": 2 to 6 key terms the materials define, each with a short plain-language meaning.
+  - "formulas": the equations or rules the materials use, for quantitative or scientific lessons. Write "latex" as bare TeX with no $ or \\( delimiters, e.g. "v = u + at", and list each symbol in "variables". Do not invent formulas.
+  - "exercises": 1 to 3 short open-ended exercises (not multiple choice) with a "hint", "solution_steps" and a final "answer".
 - Every practice question must be answerable from the lesson and supplied materials, and appropriate for the learner's education level. Four options labelled "A) ", "B) ", "C) ", "D) "; correct_answer is just the letter.
 - Use examples that make sense for a learner in ${region}, but do not allow cultural examples to introduce unrelated syllabus content.
 - Visual teaching is part of the lesson, not a separate unrelated feature. For each lesson where a structure, anatomy, molecule, process, cycle, comparison, hierarchy, or spatial relationship is central to understanding, include a concise visual brief in the lesson content using a heading "Visual explanation" and specify: what should be drawn, the essential labelled parts, and what each label means. For molecular topics such as proteins, describe the relevant structural level (primary, secondary, tertiary, or quaternary) only if supported by the supplied material. Do not fabricate detailed scientific structures or labels; if the source is insufficient, state what visual detail is missing.
@@ -118,6 +123,9 @@ Return JSON:
   "lessons": [{"lesson_number": number, "title": string, "learning_objectives": [string], "content": "markdown", "key_concepts": [string],
    "worked_example": {"problem": string, "solution_steps": [string], "answer": string},
    "common_mistakes": [string],
+   "definitions": [{"term": string, "meaning": string}],
+   "formulas": [{"name": string, "latex": string, "explanation": string, "variables": [{"symbol": string, "meaning": string}]}],
+   "exercises": [{"prompt": string, "hint": string, "solution_steps": [string], "answer": string}],
    "practice_questions": [{"question": string, "concept": string, "options": ["A) ...","B) ...","C) ...","D) ..."], "correct_answer": "A", "explanation": string}]}]}]}`;
 
       const data = await callAIJSON<any>({ task: 'course_builder', prompt, region, persona, userGroqKey, projectId, validationType: 'course' });
@@ -238,6 +246,8 @@ Return JSON:
           lesson={active} projectId={projectId} userId={userId} region={region} persona={persona} userGroqKey={userGroqKey}
           level={project ? levelOf(project) : undefined} onPersist={saveLessonVisual}
         />
+
+        <LessonExtras lesson={active} />
 
         {active.key_concepts?.length > 0 && (
           <Surface className="border-marker bg-marker-wash p-4">

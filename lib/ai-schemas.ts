@@ -43,7 +43,7 @@ function answerLetter(answer: unknown, options: string[]): string | null {
 
 export interface NormalizedQuestion {
   id: string;
-  type: 'multiple_choice' | 'true_false' | 'fill_gap' | 'concept_trap' | 'diagram';
+  type: 'multiple_choice' | 'true_false' | 'fill_gap' | 'concept_trap' | 'diagram' | 'statements' | 'theory';
   question: string;
   options?: string[];
   correct_answer: string;
@@ -51,6 +51,16 @@ export interface NormalizedQuestion {
   concept: string;
   cognitive_level: string;
   [key: string]: unknown;
+}
+
+const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+
+/** "I. text" for each statement, whatever labelling the model used (or none). */
+export function normalizeStatements(raw: unknown): string[] {
+  return strList(raw)
+    .slice(0, ROMAN.length)
+    .map((t, i) => `${ROMAN[i]}. ${t.replace(/^\(?(?:iv|vi|v|i{1,3}|[1-6])[\).:\-]\s+/i, '').trim()}`)
+    .filter(t => t.length > 4);
 }
 
 function normalizeQuestion(raw: unknown, index: number): NormalizedQuestion | null {
@@ -78,10 +88,25 @@ function normalizeQuestion(raw: unknown, index: number): NormalizedQuestion | nu
     return letter ? { ...base, type: 'true_false', options: ['A) True', 'B) False'], correct_answer: letter } : null;
   }
 
+  if (declared === 'theory' || declared === 'essay' || declared === 'short_answer') {
+    const model = str(raw.model_answer) || str(raw.correct_answer) || str(raw.answer);
+    if (!model) return null;
+    let points = strList(raw.marking_points).slice(0, 8);
+    if (!points.length) points = model.split(/(?<=[.!?])\s+/).map(x => x.trim()).filter(x => x.length > 8).slice(0, 5);
+    if (!points.length) points = [model];
+    return { ...base, type: 'theory', correct_answer: model, model_answer: model, marking_points: points };
+  }
+
   const options = normalizeOptions(raw.options);
   if (options.length < 2) return null;
   const letter = answerLetter(raw.correct_answer, options);
   if (!letter) return null;
+
+  if (declared === 'statements' || declared === 'statement') {
+    const statements = normalizeStatements(raw.statements);
+    if (statements.length < 3) return null;
+    return { ...base, type: 'statements', statements, options, correct_answer: letter };
+  }
 
   const type = declared === 'concept_trap' || declared === 'diagram' ? declared : 'multiple_choice';
   return { ...base, type: type as NormalizedQuestion['type'], options, correct_answer: letter };
@@ -100,6 +125,40 @@ function normalizeQuestions(raw: unknown, idPrefix: string): NormalizedQuestion[
     out.push({ ...q, id });
   });
   return out;
+}
+
+// ── Optional lesson extras (definitions, formulas, exercises) ──────────────────
+
+const clip = (v: unknown, n: number) => str(v).slice(0, n);
+
+export function normalizeDefinitions(raw: unknown): { term: string; meaning: string }[] {
+  return (Array.isArray(raw) ? raw : []).filter(isObj)
+    .map(d => ({ term: clip(d.term, 80), meaning: clip(d.meaning ?? d.definition, 400) }))
+    .filter(d => d.term && d.meaning).slice(0, 8);
+}
+
+/** Bare TeX: strips $, $$, \( \) and \[ \] wrappers models like to add. */
+export function cleanLatex(v: unknown): string {
+  return str(v).replace(/^\s*(\$\$|\$|\\\(|\\\[)/, '').replace(/(\$\$|\$|\\\)|\\\])\s*$/, '').trim();
+}
+
+export function normalizeFormulas(raw: unknown): { name: string; latex: string; explanation: string; variables: { symbol: string; meaning: string }[] }[] {
+  return (Array.isArray(raw) ? raw : []).filter(isObj)
+    .map(f => ({
+      name: clip(f.name, 100),
+      latex: cleanLatex(f.latex ?? f.formula).slice(0, 300),
+      explanation: clip(f.explanation, 400),
+      variables: (Array.isArray(f.variables) ? f.variables : []).filter(isObj)
+        .map(v => ({ symbol: clip(v.symbol, 40), meaning: clip(v.meaning, 160) }))
+        .filter(v => v.symbol && v.meaning).slice(0, 10),
+    }))
+    .filter(f => f.latex).slice(0, 6);
+}
+
+export function normalizeExercises(raw: unknown): { prompt: string; hint: string; solution_steps: string[]; answer: string }[] {
+  return (Array.isArray(raw) ? raw : []).filter(isObj)
+    .map(e => ({ prompt: clip(e.prompt ?? e.question, 600), hint: clip(e.hint, 300), solution_steps: strList(e.solution_steps).slice(0, 10), answer: clip(e.answer, 400) }))
+    .filter(e => e.prompt && (e.answer || e.solution_steps.length)).slice(0, 5);
 }
 
 const questionSet = (min: number, prefix: string) => (data: unknown): Validation<{ questions: NormalizedQuestion[]; [k: string]: unknown }> => {
@@ -141,6 +200,9 @@ function normalizeCourse(data: unknown): Validation<Obj> {
           : null,
         common_mistakes: strList(l.common_mistakes),
         practice_questions: normalizeQuestions(l.practice_questions, 'pq'),
+        definitions: normalizeDefinitions(l.definitions),
+        formulas: normalizeFormulas(l.formulas),
+        exercises: normalizeExercises(l.exercises),
       });
     });
     if (!lessons.length) return;
@@ -224,6 +286,14 @@ const examAnalysis = (data: unknown): Validation<Obj> => {
   });
 };
 
+const theoryFeedback = (data: unknown): Validation<Obj> => {
+  if (!isObj(data)) return fail('expected { covered, feedback }');
+  const feedback = str(data.feedback);
+  if (feedback.length < 5) return fail('expected written feedback');
+  const covered = Array.from(new Set((Array.isArray(data.covered) ? data.covered : []).map(Number).filter(n => Number.isInteger(n) && n >= 0)));
+  return ok({ covered, feedback, improvement: str(data.improvement) });
+};
+
 const anyJSON = (data: unknown): Validation<unknown> =>
   data !== null && typeof data === 'object' ? ok(data) : fail('expected a JSON object or array');
 
@@ -259,6 +329,10 @@ export const LessonSchema = z.object({
   common_mistakes: zList,
   worked_example: z.object({ problem: z.string().min(1), solution_steps: zList, answer: zText }).nullable(),
   practice_questions: z.array(QuestionSchema),
+  // Added in Phase 1b. Optional so courses saved before then still validate.
+  definitions: z.array(z.object({ term: z.string().min(1), meaning: z.string().min(1) })).optional(),
+  formulas: z.array(z.object({ name: zText, latex: z.string().min(1).max(300), explanation: zText, variables: z.array(z.object({ symbol: z.string().min(1), meaning: z.string().min(1) })) })).optional(),
+  exercises: z.array(z.object({ prompt: z.string().min(1), hint: zText, solution_steps: zList, answer: zText })).optional(),
 }).passthrough();
 
 export const CourseSchema = z.object({
@@ -281,6 +355,8 @@ export const SCHEMAS: Record<string, z.ZodTypeAny> = {
   quiz: questionsSchema(3),
   exam: questionsSchema(5),
   quick_check: questionsSchema(1),
+  quiz_custom: questionsSchema(1),
+  theory_feedback: z.object({ covered: z.array(z.number().int().min(0)), feedback: z.string().min(5), improvement: zText }).passthrough(),
   flashcard: z.object({ mnemonic: z.string().min(1), explanation: zText }).passthrough(),
   visual_explain: z.object({ summary: z.string().min(10), parts: z.array(z.object({ id: z.string().min(1), text: z.string().min(1) })) }).passthrough(),
   fact: z.object({ type: zText, title: zText, fact: z.string().min(1) }).passthrough(),
@@ -306,6 +382,8 @@ const RAW_VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
   quiz: questionSet(3, 'q'),
   exam: questionSet(5, 'q'),
   quick_check: questionSet(1, 'q'),
+  quiz_custom: questionSet(1, 'q'),
+  theory_feedback: theoryFeedback,
   flashcard,
   visual_question: visualQuestion,
   visual_spec: validateVisualDecision,

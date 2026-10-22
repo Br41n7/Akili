@@ -1,10 +1,10 @@
-export function summarizeAssessment(questions: any[], answers: Record<string, string>) {
+import { isAnswerCorrect, type TheoryMarks } from '@/lib/quiz-config';
+
+export function summarizeAssessment(questions: any[], answers: Record<string, string>, marks?: TheoryMarks) {
   const byConcept: Record<string, { total: number; correct: number }> = {};
   for (const q of questions) {
     const concept = q.concept || 'General';
-    const correct = q.type === 'fill_gap'
-      ? answers[q.id]?.trim().toLowerCase() === String(q.correct_answer).trim().toLowerCase()
-      : answers[q.id] === q.correct_answer;
+    const correct = isAnswerCorrect(q, answers[q.id], marks);
     byConcept[concept] ||= { total: 0, correct: 0 };
     byConcept[concept].total++;
     if (correct) byConcept[concept].correct++;

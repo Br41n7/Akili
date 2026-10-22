@@ -1,8 +1,11 @@
 'use client';
 import { useEffect, useRef, useState, type ComponentPropsWithRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { AlertTriangle, Check, Loader2, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, toggleSelection } from '@/lib/utils';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Brand
@@ -186,6 +189,33 @@ export function ChoiceChips<T extends string>({ options, value, onChange, label 
               selected ? 'border-ink bg-ink text-white' : 'border-rule bg-paper text-ink hover:border-ink/40',
             )}
           >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Pick any number of options. At least `min` stay selected, so a setting can never be emptied. */
+export function MultiChips<T extends string>({ options, value, onChange, label, min = 1 }: { options: { value: T; label: string }[]; value: T[]; onChange: (v: T[]) => void; label: string; min?: number }) {
+  const toggle = (v: T) => onChange(toggleSelection(options.map(o => o.value), value, v, min));
+  return (
+    <div role="group" aria-label={label} className="flex flex-wrap gap-2">
+      {options.map(o => {
+        const on = value.includes(o.value);
+        return (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={on}
+            onClick={() => toggle(o.value)}
+            className={cn(
+              'inline-flex min-h-11 items-center gap-1.5 rounded-xl border px-3.5 text-sm font-semibold transition-colors',
+              on ? 'border-ink bg-ink text-white' : 'border-rule bg-paper text-ink hover:border-ink/40',
+            )}
+          >
+            {on && <Check size={15} aria-hidden="true" />}
             {o.label}
           </button>
         );
@@ -396,7 +426,7 @@ export function ConfirmDialog({ open, title, body, confirmLabel, cancelLabel = '
 export function Prose({ children, className }: { children: string; className?: string }) {
   return (
     <div className={cn('prose-akili', className)}>
-      <ReactMarkdown>{children}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[[remarkMath, { singleDollarTextMath: false }]]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: 'ignore', trust: false }]]}>{children}</ReactMarkdown>
     </div>
   );
 }
