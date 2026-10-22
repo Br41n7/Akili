@@ -5,6 +5,7 @@
  * gaps (missing ids, option letters, answer format) and rejects output the UI
  * could not render. Rejected output triggers a regeneration in `runAIJSON`.
  */
+import { validateMnemonic } from '@/lib/mnemonics';
 import { z } from 'zod';
 import type { Validation } from '@/lib/ai';
 import { validateVisualDecision } from '@/lib/visual/schema';
@@ -208,6 +209,65 @@ export function normalizeSlideDeck(data: unknown): Validation<Obj> {
   return ok({ title: clip(data.title, 120) || 'Slide deck', subtitle: clip(data.subtitle, 160), slides });
 }
 
+
+// ── Mind map and knowledge graph ──────────────────────────────────────────────
+
+export function normalizeMindMap(data: unknown): Validation<Obj> {
+  if (!isObj(data)) return fail('expected a mind map object');
+  const seen = new Set<string>();
+  const branches: Obj[] = [];
+  (Array.isArray(data.branches) ? data.branches : []).forEach((raw: unknown) => {
+    if (!isObj(raw) || branches.length >= 8) return;
+    const label = clip(raw.label ?? raw.title, 60);
+    if (!label || seen.has(label.toLowerCase())) return;
+    seen.add(label.toLowerCase());
+    const kids = new Set<string>();
+    const children: Obj[] = [];
+    (Array.isArray(raw.children) ? raw.children : []).forEach((c: unknown) => {
+      const o = isObj(c) ? c : { label: c };
+      const l = clip(o.label ?? o.title, 70);
+      if (!l || kids.has(l.toLowerCase()) || children.length >= 4) return;
+      kids.add(l.toLowerCase());
+      children.push({ label: l, note: clip(o.note, 200) });
+    });
+    branches.push({ label, note: clip(raw.note, 200), children });
+  });
+  if (branches.length < 3) return fail('the mind map needs at least 3 distinct branches');
+  const center = clip(data.center, 60) || clip(data.title, 60);
+  if (!center) return fail('the mind map needs a central idea');
+  return ok({ title: clip(data.title, 100) || center, center, branches });
+}
+
+export function normalizeKnowledgeGraph(data: unknown): Validation<Obj> {
+  if (!isObj(data)) return fail('expected a knowledge graph object');
+  const nodes: Obj[] = []; const ids = new Set<string>(); const labels = new Set<string>();
+  (Array.isArray(data.nodes) ? data.nodes : []).forEach((raw: unknown) => {
+    if (!isObj(raw) || nodes.length >= 14) return;
+    const id = str(raw.id).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 24);
+    const label = clip(raw.label ?? raw.name, 60);
+    if (!id || !label || ids.has(id) || labels.has(label.toLowerCase())) return;
+    ids.add(id); labels.add(label.toLowerCase()); nodes.push({ id, label });
+  });
+  if (nodes.length < 4) return fail('the graph needs at least 4 distinct concepts');
+  const edges: Obj[] = []; const pairs = new Set<string>();
+  (Array.isArray(data.edges) ? data.edges : []).forEach((raw: unknown) => {
+    if (!isObj(raw) || edges.length >= 28) return;
+    const from = str(raw.from ?? raw.source).replace(/[^A-Za-z0-9_-]/g, '');
+    const to = str(raw.to ?? raw.target).replace(/[^A-Za-z0-9_-]/g, '');
+    const relation = clip(raw.relation ?? raw.label, 40);
+    if (!ids.has(from) || !ids.has(to) || from === to || !relation) return;
+    const key = `${from}>${to}>${relation.toLowerCase()}`;
+    if (pairs.has(key)) return;
+    pairs.add(key); edges.push({ from, to, relation });
+  });
+  if (edges.length < 3) return fail('the graph needs at least 3 valid relationships between its concepts');
+  // Drop concepts nothing connects to, then require enough to remain.
+  const used = new Set(edges.flatMap(e => [e.from, e.to]));
+  const kept = nodes.filter(n => used.has(n.id));
+  if (kept.length < 4) return fail('too few concepts are connected');
+  return ok({ title: clip(data.title, 100) || 'Knowledge graph', nodes: kept, edges });
+}
+
 const questionSet = (min: number, prefix: string) => (data: unknown): Validation<{ questions: NormalizedQuestion[]; [k: string]: unknown }> => {
   const root = Array.isArray(data) ? { questions: data } : data;
   if (!isObj(root)) return fail('expected an object with a questions array');
@@ -279,6 +339,11 @@ function normalizeCourse(data: unknown): Validation<Obj> {
 const flashcard = (data: unknown): Validation<Obj> => {
   if (!isObj(data) || !str(data.mnemonic)) return fail('expected { mnemonic, explanation }');
   return ok({ mnemonic: str(data.mnemonic), explanation: str(data.explanation) });
+};
+
+const mnemonicCheck = (data: unknown): Validation<Obj> => {
+  const r = validateMnemonic(data);
+  return r.ok ? ok(r.data as unknown as Obj) : fail(r.error);
 };
 
 const visualQuestion = (data: unknown): Validation<Obj> => {
@@ -418,6 +483,17 @@ export const SlideDeckSchema = z.object({
   slides: z.array(z.object({ title: z.string().min(1), bullets: z.array(z.string().min(1)).min(1).max(6), speaker_notes: zText, visual_hint: zText })).min(3).max(20),
 });
 
+
+export const MindMapSchema = z.object({
+  title: z.string().min(1), center: z.string().min(1),
+  branches: z.array(z.object({ label: z.string().min(1), note: zText, children: z.array(z.object({ label: z.string().min(1), note: zText })).max(4) })).min(3).max(8),
+});
+export const KnowledgeGraphSchema = z.object({
+  title: z.string().min(1),
+  nodes: z.array(z.object({ id: z.string().min(1), label: z.string().min(1) })).min(4).max(14),
+  edges: z.array(z.object({ from: z.string().min(1), to: z.string().min(1), relation: z.string().min(1) })).min(3).max(28),
+});
+
 const questionsSchema = (min: number) => z.object({ questions: z.array(QuestionSchema).min(min) }).passthrough();
 
 export const SCHEMAS: Record<string, z.ZodTypeAny> = {
@@ -428,7 +504,10 @@ export const SCHEMAS: Record<string, z.ZodTypeAny> = {
   quiz_custom: questionsSchema(1),
   study_guide: StudyGuideSchema,
   slide_deck: SlideDeckSchema,
+  mind_map: MindMapSchema,
+  knowledge_graph: KnowledgeGraphSchema,
   theory_feedback: z.object({ covered: z.array(z.number().int().min(0)), feedback: z.string().min(5), improvement: zText }).passthrough(),
+  mnemonic: z.object({ mnemonic: z.string().min(1), explanation: zText, breakdown: z.array(z.object({ letter: z.string().min(1), item: z.string().min(1) })) }),
   flashcard: z.object({ mnemonic: z.string().min(1), explanation: zText }).passthrough(),
   visual_explain: z.object({ summary: z.string().min(10), parts: z.array(z.object({ id: z.string().min(1), text: z.string().min(1) })) }).passthrough(),
   fact: z.object({ type: zText, title: zText, fact: z.string().min(1) }).passthrough(),
@@ -457,8 +536,11 @@ const RAW_VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
   quiz_custom: questionSet(1, 'q'),
   study_guide: normalizeStudyGuide,
   slide_deck: normalizeSlideDeck,
+  mind_map: normalizeMindMap,
+  knowledge_graph: normalizeKnowledgeGraph,
   theory_feedback: theoryFeedback,
   flashcard,
+  mnemonic: mnemonicCheck,
   visual_question: visualQuestion,
   visual_spec: validateVisualDecision,
   visual_explain: visualExplain,

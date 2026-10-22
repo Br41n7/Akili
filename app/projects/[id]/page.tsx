@@ -34,7 +34,7 @@ const TABS: TabDef[] = [
   { id: 'exam', label: 'Exam', icon: ShieldAlert, desc: 'Timed mock exam' },
   { id: 'ask', label: 'Ask AI', icon: MessageSquare, desc: 'Ask questions about your notes' },
   { id: 'flashcards', label: 'Flashcards', icon: Sparkles, desc: 'Memory aids' },
-  { id: 'study', label: 'Study', icon: BookOpen, desc: 'Study guides and slides' },
+  { id: 'study', label: 'Study', icon: BookOpen, desc: 'Guides, slides, mind maps' },
   { id: 'analysis', label: 'Topic analysis', icon: BarChart3, desc: 'What comes up most' },
   { id: 'progress', label: 'Progress', icon: Brain, desc: 'Strong and weak concepts' },
   { id: 'research', label: 'Research', icon: Zap, desc: 'Editing and facts' },

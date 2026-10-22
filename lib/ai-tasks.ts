@@ -48,13 +48,13 @@ const list: TaskSpec[] = [
   { id: 'slide_deck', providers: GROQ_FIRST, input: 'text', validation: 'slide_deck', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
 
   // Routine text transformations: DeepSeek first when configured.
-  { id: 'mnemonic', providers: DEEPSEEK_FIRST, input: 'text', validation: 'flashcard', timeoutMs: LIGHT_MS, retries: 1, lowEffort: true },
+  { id: 'mnemonic', providers: DEEPSEEK_FIRST, input: 'text', validation: 'mnemonic', timeoutMs: LIGHT_MS, retries: 1, lowEffort: true },
   { id: 'shortcut', providers: DEEPSEEK_FIRST, input: 'text', timeoutMs: LIGHT_MS, retries: 1, lowEffort: true },
   { id: 'study_plan', providers: DEEPSEEK_FIRST, input: 'text', timeoutMs: LIGHT_MS, retries: 1, lowEffort: true },
 
   // Structure and reasoning.
-  { id: 'mind_map', providers: GROQ_FIRST, input: 'text', validation: 'visual_spec', timeoutMs: BASE_MS, retries: 1 },
-  { id: 'knowledge_graph', providers: GROQ_FIRST, input: 'text', validation: 'visual_spec', timeoutMs: BASE_MS, retries: 1 },
+  { id: 'mind_map', providers: GROQ_FIRST, input: 'text', validation: 'mind_map', timeoutMs: BASE_MS, retries: 1 },
+  { id: 'knowledge_graph', providers: GROQ_FIRST, input: 'text', validation: 'knowledge_graph', timeoutMs: BASE_MS, retries: 1 },
   { id: 'concept_battle', providers: GEMINI_FIRST, input: 'text', timeoutMs: BASE_MS, retries: 1 },
   { id: 'confusion', providers: GEMINI_FIRST, input: 'text', timeoutMs: BASE_MS, retries: 1, lowEffort: true },
   { id: 'theory_feedback', providers: GEMINI_FIRST, input: 'text', validation: 'theory_feedback', timeoutMs: BASE_MS, retries: 1, lowEffort: true },

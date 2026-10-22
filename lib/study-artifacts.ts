@@ -3,8 +3,10 @@
  * Pure functions (no React, no Supabase) so they can be tested directly.
  */
 import { MAX_SLIDES, MIN_SLIDES } from '@/lib/ai-schemas';
+import type { KnowledgeGraph, MindMap } from '@/lib/concept-maps';
 
-export type ArtifactKind = 'study_guide' | 'slide_deck';
+export type ArtifactKind = 'study_guide' | 'slide_deck' | 'mind_map' | 'knowledge_graph';
+export const ARTIFACT_KINDS: ArtifactKind[] = ['study_guide', 'slide_deck', 'mind_map', 'knowledge_graph'];
 
 export interface Definition { term: string; meaning: string }
 export interface Formula { name: string; latex: string; explanation: string; variables: { symbol: string; meaning: string }[] }
@@ -23,7 +25,7 @@ export interface SlideDeck {
   slides: { title: string; bullets: string[]; speaker_notes: string; visual_hint: string }[];
 }
 
-export interface StoredArtifact { id: string; kind: ArtifactKind; title: string; content: StudyGuide | SlideDeck; created_at: string }
+export interface StoredArtifact { id: string; kind: ArtifactKind; title: string; content: StudyGuide | SlideDeck | MindMap | KnowledgeGraph; created_at: string }
 
 export const SLIDE_PRESETS = [5, 8, 12, 15];
 export const DEFAULT_SLIDES = 8;
