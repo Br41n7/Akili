@@ -44,8 +44,8 @@ const LIGHT_MS = 30_000;
 const list: TaskSpec[] = [
   // Bulk structured generation: Groq first to spare Gemini quota.
   { id: 'course_builder', providers: GROQ_FIRST, input: 'text', validation: 'course', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
-  { id: 'study_guide', providers: GROQ_FIRST, input: 'text', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
-  { id: 'slide_deck', providers: GROQ_FIRST, input: 'text', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
+  { id: 'study_guide', providers: GROQ_FIRST, input: 'text', validation: 'study_guide', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
+  { id: 'slide_deck', providers: GROQ_FIRST, input: 'text', validation: 'slide_deck', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
 
   // Routine text transformations: DeepSeek first when configured.
   { id: 'mnemonic', providers: DEEPSEEK_FIRST, input: 'text', validation: 'flashcard', timeoutMs: LIGHT_MS, retries: 1, lowEffort: true },
@@ -92,5 +92,5 @@ export const DEFAULT_TASK: TaskSpec = Object.freeze({
 export const getTask = (id: string): TaskSpec => (isKnownTask(id) ? TASKS[id] : DEFAULT_TASK);
 
 /** Persona ids the client may send. Anything else is rejected, not pasted into the prompt. */
-export const PERSONA_IDS = ['friendly', 'strict', 'socratic', 'exam', 'research'] as const;
+export const PERSONA_IDS = ['friendly', 'strict', 'socratic', 'exam', 'research', 'planner'] as const;
 export type PersonaId = (typeof PERSONA_IDS)[number];

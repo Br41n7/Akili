@@ -67,6 +67,7 @@ export interface AIResult {
 
 export type AIErrorCode =
   | 'AI_NOT_CONFIGURED'
+  | 'AI_NO_VISION'
   | 'AI_UNAVAILABLE'
   | 'AI_TIMEOUT'
   | 'AI_RATE_LIMITED'
@@ -75,6 +76,7 @@ export type AIErrorCode =
 
 const PUBLIC_MESSAGES: Record<AIErrorCode, string> = {
   AI_NOT_CONFIGURED: 'The AI tutor is not available right now. Please try again later.',
+  AI_NO_VISION: 'Reading pictures is not available right now. Try again later, or continue without the picture.',
   AI_UNAVAILABLE: 'The AI tutor is busy right now. Please try again in a moment.',
   AI_TIMEOUT: 'This is taking longer than expected. Try again, or use a smaller section of your material.',
   AI_RATE_LIMITED: 'Many students are studying right now. Wait a few seconds and try again.',
@@ -84,6 +86,7 @@ const PUBLIC_MESSAGES: Record<AIErrorCode, string> = {
 
 const PUBLIC_STATUS: Record<AIErrorCode, number> = {
   AI_NOT_CONFIGURED: 503,
+  AI_NO_VISION: 503,
   AI_UNAVAILABLE: 503,
   AI_TIMEOUT: 504,
   AI_RATE_LIMITED: 429,
@@ -485,7 +488,8 @@ export async function runAIDetailed(opts: AIOptions): Promise<AIResult> {
   const all = buildCandidates(opts, spec);
   if (!all.length) {
     console.error(`[ai] No eligible provider for task "${opts.task}"${opts.image ? ' with an image' : ''}. Check provider keys and vision models.`);
-    throw new AIServiceError('AI_NOT_CONFIGURED', 'no eligible provider');
+    // Say so plainly when the problem is the picture, not the whole service.
+    throw new AIServiceError(opts.image && !opts.userKeyOnly ? 'AI_NO_VISION' : 'AI_NOT_CONFIGURED', 'no eligible provider');
   }
 
   const failures: { c: Candidate; f: ProviderFailure }[] = [];

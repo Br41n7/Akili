@@ -7,7 +7,10 @@ import { summarizeAssessment } from '@/lib/local-learning';
 import QuizSettings from '@/components/QuizSettings';
 import { DEFAULT_QUESTIONS, QUESTION_TYPES, buildQuizPrompt, clampCount, isAnswerCorrect, shapeQuestions, theoryFraction, type QuizQuestionType, type TheoryMarks } from '@/lib/quiz-config';
 import ConceptVisual from '@/components/visual/ConceptVisual';
-import GeneratedDiagram, { type GeneratedDiagramSpec } from '@/components/GeneratedDiagram';
+import VisualRenderer from '@/components/visual/VisualRenderer';
+import { requestLessonVisual, shouldConsiderVisual } from '@/lib/visual/planner';
+import { recordVisualAnswer } from '@/lib/visual/adaptive';
+import type { VisualSpec } from '@/lib/visual/schema';
 import { ArrowRight, Brain, Check, ImagePlus, RotateCcw, Sparkles, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -16,7 +19,7 @@ import {
 
 interface Props { projectId: string; userId: string; region: string; persona: string; onGoToMaterials?: () => void }
 
-type Phase = 'setup' | 'generating' | 'quiz' | 'results';
+type Phase = 'setup' | 'generating' | 'quiz' | 'results' | 'visual';
 type Difficulty = 'easy' | 'medium' | 'hard';
 
 const STEPS = ['Reading your materials', 'Checking what you already know', 'Writing questions', 'Checking the answers'];
@@ -30,7 +33,7 @@ export default function QuizMode({ projectId, userId, region, persona }: Props) 
   const [theoryMarks, setTheoryMarks] = useState<TheoryMarks>({});
   const [markingId, setMarkingId] = useState<string | null>(null);
   const [diagram, setDiagram] = useState<{ base64: string; mimeType: string } | null>(null);
-  const [generatedDiagram, setGeneratedDiagram] = useState<GeneratedDiagramSpec | null>(null);
+  const [visualSpec, setVisualSpec] = useState<VisualSpec | null>(null);
 
   const [questions, setQuestions] = useState<any[]>([]);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -66,38 +69,43 @@ export default function QuizMode({ projectId, userId, region, persona }: Props) 
     return { context: (docs || []).map(d => d.content).join('\n\n').slice(0, chars), adaptive: compactLearnerContext(learner) };
   };
 
-  const start = async (visual: boolean) => {
+  const start = async () => {
     setPhase('generating'); setError(''); setQuestions([]); setAnswers({}); setIndex(0); setRevealed(false); setSummary(null); setTheoryMarks({});
-    if (!visual) setGeneratedDiagram(null);
     try {
-      if (visual) {
-        const { context, adaptive } = await loadContext(2, 5000);
-        const prompt = `Create ONE visual learning question about "${topic || 'the learner’s weakest relevant concept'}".
-Material:
-${context || 'No material supplied; use standard textbook knowledge for the learner’s level.'}
-Learner context: ${JSON.stringify(adaptive)}
-
-Return JSON only: {"diagram":{"kind":"skull|heart|cell|amino_acid|generic","title":string,"labels":[{"id":"I","name":string,"x":number,"y":number},{"id":"II","name":string,"x":number,"y":number},{"id":"III","name":string,"x":number,"y":number},{"id":"IV","name":string,"x":number,"y":number}],"note":string},"question":string,"options":["A) ...","B) ...","C) ...","D) ..."],"correct_answer":"A","explanation":string,"concept":string,"cognitive_level":"understanding|application|transfer"}.
-Use a topic-appropriate schematic, not a generic placeholder when a specific structure is requested. Use amino_acid for amino-acid topics: show NH₂, COOH, H and R attached to central alpha-carbon V; I–IV identify the four substituent groups and V identifies the alpha-carbon. The stereocenter is V for amino acids with four different substituents; glycine is achiral when R is also H. Do not ask which substituent is the stereocenter. For other topics, use only the supported kind that fits. Label IDs must match options and the actual diagram. Never rely on x/y coordinates for layout.`;
-        const data = await callAIJSON<any>({ task: 'diagram_question', prompt, region, persona, projectId, validationType: 'visual_question' });
-        setGeneratedDiagram(data.diagram);
-        setQuestions([{ ...data, id: `visual-${Date.now()}`, type: 'diagram' }]);
-      } else {
-        const { context, adaptive } = await loadContext(3, 6000);
-        const wanted = clampCount(count);
-        const prompt = buildQuizPrompt({ topic, difficulty, count: wanted, types, hasImage: !!diagram, context, adaptive });
-        const data = await callAIJSON<any>({
-          task: diagram ? 'diagram_question' : 'adaptive_quiz', prompt, region, persona, projectId,
-          image: diagram || undefined, validationType: 'quiz_custom',
-        });
-        const shaped = shapeQuestions<any>(data.questions, { count: wanted, types, hasImage: !!diagram });
-        if (!shaped.length) throw new Error('The AI did not return the question types you chose. Please try again.');
-        if (shaped.length < wanted) toast(`Built ${shaped.length} of ${wanted} questions.`);
-        setQuestions(shaped);
-      }
+      const { context, adaptive } = await loadContext(3, 6000);
+      const wanted = clampCount(count);
+      const prompt = buildQuizPrompt({ topic, difficulty, count: wanted, types, hasImage: !!diagram, context, adaptive });
+      const data = await callAIJSON<any>({
+        task: diagram ? 'diagram_question' : 'adaptive_quiz', prompt, region, persona, projectId,
+        image: diagram || undefined, validationType: 'quiz_custom',
+      });
+      const shaped = shapeQuestions<any>(data.questions, { count: wanted, types, hasImage: !!diagram });
+      if (!shaped.length) throw new Error('The AI did not return the question types you chose. Please try again.');
+      if (shaped.length < wanted) toast(`Built ${shaped.length} of ${wanted} questions.`);
+      setQuestions(shaped);
       setPhase('quiz');
     } catch (err) {
       setError(errorMessage(err, 'We could not build the quiz. Please try again.'));
+      setPhase('setup');
+    }
+  };
+
+  /** A real diagram of the topic, with the engine's own "Test me" questions. Replaces the old generic placeholder. */
+  const startVisual = async () => {
+    setPhase('generating'); setError(''); setVisualSpec(null);
+    try {
+      const { context } = await loadContext(2, 5000);
+      const subject = topic.trim() || context.slice(0, 400);
+      if (!subject) throw new Error('Type a topic, or add materials first, so there is something to draw.');
+      const decision = await requestLessonVisual({
+        title: topic.trim() || 'Key idea from your materials', content: context || topic, simplify: true,
+        subjectHint: shouldConsiderVisual(`${topic}\n${context}`).subject, region, projectId,
+      });
+      if (!decision.needs_visual) throw new Error('A diagram would not add much for this topic. Try a different topic, or take the regular quiz.');
+      setVisualSpec(decision.spec);
+      setPhase('visual');
+    } catch (err) {
+      setError(errorMessage(err, 'We could not draw a diagram. Please try again.'));
       setPhase('setup');
     }
   };
@@ -184,7 +192,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
           <p className="mt-1 flex items-center gap-1.5 text-sm text-muted"><Brain size={15} /> Leave the topic blank and Akili picks your weak areas.</p>
         </div>
 
-        {error && <ErrorState message={error} onRetry={() => start(false)} />}
+        {error && <ErrorState message={error} onRetry={() => start()} />}
 
         <Surface className="space-y-5 p-4">
           <Field label="Topic" htmlFor="qz-topic" optional>
@@ -222,8 +230,27 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
           </details>
         </Surface>
 
-        <Button block onClick={() => start(false)}><Sparkles size={17} /> Start quiz</Button>
-        <Button block variant="quiet" onClick={() => start(true)}>One visual question instead</Button>
+        <Button block onClick={() => start()}><Sparkles size={17} /> Start quiz</Button>
+        <Button block variant="quiet" onClick={startVisual}><ImagePlus size={17} /> Quiz me with a diagram</Button>
+      </div>
+    );
+  }
+
+  // ── Diagram quiz ──────────────────────────────────────────────────────────
+
+  if (phase === 'visual' && visualSpec) {
+    return (
+      <div className="space-y-4 p-4">
+        <VisualRenderer
+          visualSpec={visualSpec}
+          ai={{ projectId, region, persona }}
+          onAnswer={(question, chosen, correct) => { void recordVisualAnswer({ userId, projectId, spec: visualSpec, question, chosen, correct }); }}
+        />
+        <p className="text-sm text-muted">Open <span className="font-semibold">Test me</span> under the diagram to answer questions about it.</p>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <Button block variant="quiet" onClick={startVisual}><RotateCcw size={16} /> Another diagram</Button>
+          <Button block onClick={() => { setVisualSpec(null); setPhase('setup'); }}>Back to quiz setup</Button>
+        </div>
       </div>
     );
   }
@@ -247,8 +274,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
           <ProgressBar value={((index + (revealed ? 1 : 0)) / questions.length) * 100} label="Quiz progress" />
         </div>
 
-        {generatedDiagram && <GeneratedDiagram spec={generatedDiagram} />}
-        {diagram && !generatedDiagram && (
+        {diagram && (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={`data:${diagram.mimeType};base64,${diagram.base64}`} alt="Diagram for this question" className="max-h-72 w-full rounded-2xl border border-rule bg-paper object-contain" />
         )}

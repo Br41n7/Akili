@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import { Bricolage_Grotesque, Source_Serif_4 } from 'next/font/google';
 import './globals.css';
 import { Toaster } from 'react-hot-toast';
+import PWA from '@/components/PWA';
 
 // Bricolage Grotesque carries the interface; Source Serif 4 carries anything you read for a long time.
 // The latin-ext subset covers Yoruba, Igbo and Hausa letters.
@@ -11,6 +12,10 @@ const read = Source_Serif_4({ subsets: ['latin', 'latin-ext'], variable: '--font
 export const metadata: Metadata = {
   title: 'Akili — AI study copilot for African students',
   description: 'Upload your notes or import past questions. Akili builds lessons, quizzes and mock exams for your level.',
+  applicationName: 'Akili',
+  appleWebApp: { capable: true, title: 'Akili', statusBarStyle: 'default' },
+  formatDetection: { telephone: false },
+  icons: { icon: [{ url: '/icons/favicon-64.png', sizes: '64x64', type: 'image/png' }, { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' }], apple: [{ url: '/icons/apple-touch-icon.png', sizes: '180x180' }] },
 };
 
 export const viewport: Viewport = {
@@ -30,6 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           toastOptions={{ style: { background: '#16204A', color: '#fff', fontSize: '14px', borderRadius: '12px' }, duration: 3500 }}
         />
         {children}
+        <PWA />
       </body>
     </html>
   );

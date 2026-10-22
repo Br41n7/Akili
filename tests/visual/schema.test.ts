@@ -70,10 +70,19 @@ describe('10. invalid AI VisualSpec is rejected, never rendered', () => {
     const s = clone(F.brachialPlexus); s.relationships = [{ from: 'roots', relation: 'proximal_to', to: 'ghost' }];
     expect(bad(s)).toMatch(/at least one relationship/);
   });
-  it('rejects too-few elements, duplicate ids and over-long lists', () => {
+  it('rejects too-few elements and duplicate ids', () => {
     const one = clone(F.skinLayers); one.elements = one.elements.slice(0, 1); bad(one);
     const dup = clone(F.skinLayers); dup.elements[1].id = dup.elements[0].id; bad(dup);
-    const many = clone(F.skinLayers); many.elements = Array.from({ length: 40 }, (_, i) => ({ id: `e${i}`, label: `E${i}`, description: 'x' })); bad(many);
+  });
+  it('trims over-long lists to the limits instead of rejecting the whole diagram', () => {
+    const many = clone(F.skinLayers); many.elements = Array.from({ length: 40 }, (_, i) => ({ id: `e${i}`, label: `E${i}`, description: 'x' }));
+    const r = parseVisualSpec(many);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.data.elements).toHaveLength(24);
+    const steps = clone(F.enzymeMechanism); steps.steps = Array.from({ length: 20 }, (_, i) => ({ title: `S${i}`, text: 'text', elements: [] }));
+    const s = parseVisualSpec(steps);
+    expect(s.ok).toBe(true);
+    if (s.ok) expect(s.data.steps).toHaveLength(12);
   });
   it('rejects a chemically impossible molecule (carbon with 5 bonds)', () => {
     const m = clone(F.peptideBond);

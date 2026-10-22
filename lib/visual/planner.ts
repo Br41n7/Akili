@@ -19,14 +19,21 @@ const DOMAIN: Record<Exclude<VisualSubject, 'other'>, RegExp> = {
   prosthetics_orthotics: /\b(orthosis|orthoses|prosthe|socket|amputation|gait|ankle-foot|afo|biomechanic|suspension|alignment|stance phase|swing phase)/gi,
   biomechanics: /\b(torque|moment arm|ground reaction|centre of mass|center of mass|joint angle|lever)/gi,
 };
-const STRUCTURE = /\b(stage|step|phase|cycle|pathway|mechanism|sequence|layer|level|structure|compare|versus|differ|process|formation|synthesis)/gi;
+const STRUCTURE = /\b(stage|step|phase|cycle|pathway|mechanism|sequence|layer|level|structure|compare|versus|differ|process|formation|synthesis|diagram|flow|chain|network|circuit)/gi;
+
+/**
+ * School-level science, geography and economics vocabulary. The first block above is clinical; these are
+ * the subjects secondary and first-year learners actually study. Matches count towards the gate but never
+ * change the "likely subject" hint, which stays 'other' for them.
+ */
+const GENERAL = /\b(cell|chloroplast|nucleus|organelle|membrane|photosynth|respiration|digest|stomach|intestin|heart|ventricle|atrium|lung|kidney|brain|ecosystem|food chain|food web|habitat|chromosome|mitosis|meiosis|xylem|phloem|stomata|pollinat|reproduct|organism|inherit|atom|electron|proton|neutron|isotope|periodic table|valence|molecule|compound|reaction|electrolysis|oxidation|reduction|distillation|crystal|titration|force|velocity|acceleration|momentum|circuit|current|voltage|resistance|wave|refraction|reflection|lens|magnet|pressure|pulley|conduction|convection|radiation|gravity|radioactiv|water cycle|rock cycle|carbon cycle|nitrogen cycle|erosion|volcano|plate tectonic|climate|atmosphere|rainfall|supply|demand|equilibrium|elasticity|production possibility|cost curve|gradient|graph|curve)/gi;
 
 export interface GateResult { consider: boolean; subject: VisualSubject; domainHits: number }
 
 /**
- * Decides whether the AI planner is worth a request. Deliberately generous: the
- * planner still has the final say via needs_visual. Lessons with no science or
- * structure vocabulary never cost a request.
+ * Decides whether the AI planner is worth a request. Deliberately generous: the planner still has the
+ * final say via needs_visual, and a lesson the gate misses can still be drawn on request (LessonVisual).
+ * Lessons with no science or structure vocabulary at all never cost a request automatically.
  */
 export function shouldConsiderVisual(text: string): GateResult {
   let best: VisualSubject = 'other';
@@ -37,6 +44,7 @@ export function shouldConsiderVisual(text: string): GateResult {
     total += hits;
     if (hits > bestHits) { best = subject; bestHits = hits; }
   }
+  total += new Set((text.match(GENERAL) || []).map(m => m.toLowerCase())).size;
   const structure = new Set((text.match(STRUCTURE) || []).map(m => m.toLowerCase())).size;
   return { consider: total >= 3 || (total >= 1 && structure >= 1), subject: best, domainHits: total };
 }
@@ -64,6 +72,7 @@ RULES
 - For anatomy, if multiple clinically useful views are necessary, include view_variants with each alternate view's axes and element positions. Never invent a second view merely for decoration.
 - Output a single JSON object only. No HTML, CSS, JavaScript, markdown, URLs or prose outside the JSON. Ids are lowercase_snake_case.`;
 
+/** Kept for reference. The route owns the real text under the id 'planner'. */
 export const PLANNER_PERSONA = 'You are a precise JSON-producing planner. You do not chat.';
 
 export interface PlannerInput {
@@ -132,7 +141,7 @@ export async function requestLessonVisual(a: RequestVisualArgs): Promise<VisualD
     task: 'visual_planner',
     prompt: buildPlannerPrompt(a),
     systemInstruction: PLANNER_SYSTEM,
-    persona: PLANNER_PERSONA,
+    persona: 'planner', // an id the server knows; free-text personas are ignored by the route
     region: a.region,
     projectId: a.projectId,
     userGroqKey: a.userGroqKey,

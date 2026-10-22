@@ -161,6 +161,53 @@ export function normalizeExercises(raw: unknown): { prompt: string; hint: string
     .filter(e => e.prompt && (e.answer || e.solution_steps.length)).slice(0, 5);
 }
 
+
+// ── Study guide and slide deck ────────────────────────────────────────────────
+
+export function normalizeStudyGuide(data: unknown): Validation<Obj> {
+  if (!isObj(data)) return fail('expected a study guide object');
+  const sections: Obj[] = [];
+  (Array.isArray(data.sections) ? data.sections : []).slice(0, 12).forEach((raw: unknown) => {
+    if (!isObj(raw)) return;
+    const heading = clip(raw.heading ?? raw.title, 120);
+    const summary = clip(raw.summary ?? raw.content, 1200);
+    const key_points = strList(raw.key_points).map(p => p.slice(0, 300)).slice(0, 10);
+    if (!heading || (!summary && !key_points.length)) return;
+    sections.push({
+      heading, summary, key_points,
+      definitions: normalizeDefinitions(raw.definitions),
+      formulas: normalizeFormulas(raw.formulas),
+      examples: strList(raw.examples).map(e => e.slice(0, 500)).slice(0, 3),
+      exam_tips: strList(raw.exam_tips).map(e => e.slice(0, 300)).slice(0, 4),
+    });
+  });
+  if (!sections.length) return fail('the study guide needs at least one section with a heading and content');
+  return ok({
+    title: clip(data.title, 120) || 'Study guide',
+    overview: clip(data.overview, 800),
+    sections,
+    quick_revision: strList(data.quick_revision).map(e => e.slice(0, 200)).slice(0, 12),
+    common_mistakes: strList(data.common_mistakes).map(e => e.slice(0, 250)).slice(0, 8),
+  });
+}
+
+export const MIN_SLIDES = 3;
+export const MAX_SLIDES = 20;
+
+export function normalizeSlideDeck(data: unknown): Validation<Obj> {
+  if (!isObj(data)) return fail('expected a slide deck object');
+  const slides: Obj[] = [];
+  (Array.isArray(data.slides) ? data.slides : []).forEach((raw: unknown) => {
+    if (!isObj(raw) || slides.length >= MAX_SLIDES) return;
+    const title = clip(raw.title, 100);
+    const bullets = strList(raw.bullets).map(b => b.slice(0, 180)).slice(0, 6);
+    if (!title || !bullets.length) return;
+    slides.push({ title, bullets, speaker_notes: clip(raw.speaker_notes ?? raw.notes, 800), visual_hint: clip(raw.visual_hint, 200) });
+  });
+  if (slides.length < MIN_SLIDES) return fail(`the deck needs at least ${MIN_SLIDES} slides, each with a title and bullet points`);
+  return ok({ title: clip(data.title, 120) || 'Slide deck', subtitle: clip(data.subtitle, 160), slides });
+}
+
 const questionSet = (min: number, prefix: string) => (data: unknown): Validation<{ questions: NormalizedQuestion[]; [k: string]: unknown }> => {
   const root = Array.isArray(data) ? { questions: data } : data;
   if (!isObj(root)) return fail('expected an object with a questions array');
@@ -348,6 +395,29 @@ export const CourseSchema = z.object({
   }).passthrough()).min(1),
 }).passthrough();
 
+
+export const StudyGuideSchema = z.object({
+  title: z.string().min(1),
+  overview: zText,
+  sections: z.array(z.object({
+    heading: z.string().min(1),
+    summary: zText,
+    key_points: zList,
+    definitions: z.array(z.object({ term: z.string().min(1), meaning: z.string().min(1) })),
+    formulas: z.array(z.object({ name: zText, latex: z.string().min(1).max(300), explanation: zText, variables: z.array(z.object({ symbol: z.string().min(1), meaning: z.string().min(1) })) })),
+    examples: zList,
+    exam_tips: zList,
+  })).min(1).max(12),
+  quick_revision: zList,
+  common_mistakes: zList,
+});
+
+export const SlideDeckSchema = z.object({
+  title: z.string().min(1),
+  subtitle: zText,
+  slides: z.array(z.object({ title: z.string().min(1), bullets: z.array(z.string().min(1)).min(1).max(6), speaker_notes: zText, visual_hint: zText })).min(3).max(20),
+});
+
 const questionsSchema = (min: number) => z.object({ questions: z.array(QuestionSchema).min(min) }).passthrough();
 
 export const SCHEMAS: Record<string, z.ZodTypeAny> = {
@@ -356,6 +426,8 @@ export const SCHEMAS: Record<string, z.ZodTypeAny> = {
   exam: questionsSchema(5),
   quick_check: questionsSchema(1),
   quiz_custom: questionsSchema(1),
+  study_guide: StudyGuideSchema,
+  slide_deck: SlideDeckSchema,
   theory_feedback: z.object({ covered: z.array(z.number().int().min(0)), feedback: z.string().min(5), improvement: zText }).passthrough(),
   flashcard: z.object({ mnemonic: z.string().min(1), explanation: zText }).passthrough(),
   visual_explain: z.object({ summary: z.string().min(10), parts: z.array(z.object({ id: z.string().min(1), text: z.string().min(1) })) }).passthrough(),
@@ -383,6 +455,8 @@ const RAW_VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
   exam: questionSet(5, 'q'),
   quick_check: questionSet(1, 'q'),
   quiz_custom: questionSet(1, 'q'),
+  study_guide: normalizeStudyGuide,
+  slide_deck: normalizeSlideDeck,
   theory_feedback: theoryFeedback,
   flashcard,
   visual_question: visualQuestion,

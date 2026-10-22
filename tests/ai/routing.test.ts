@@ -185,7 +185,7 @@ describe('image input', () => {
     setEnv({ DEEPSEEK_API_KEY: 'dsk-aaaaaaaaaaaaaaaaaaaa' });
     const net = mockProviders({ deepseek: [{ text: 'ok' }] });
     const { runAIDetailed } = await load();
-    await expect(runAIDetailed({ ...base, task: 'snap_solve', image: IMAGE })).rejects.toMatchObject({ code: 'AI_NOT_CONFIGURED' });
+    await expect(runAIDetailed({ ...base, task: 'snap_solve', image: IMAGE })).rejects.toMatchObject({ code: 'AI_NO_VISION' });
     expect(net.fn).not.toHaveBeenCalled();
   });
 
@@ -212,7 +212,7 @@ describe('image input', () => {
     setEnv({ OPENAI_API_KEY: 'sk-aaaaaaaaaaaaaaaaaaaaaaaa', OPENAI_MODEL: 'gpt-3.5-turbo' });
     let net = mockProviders({ openai: [{ text: 'ok' }] });
     let { runAIDetailed } = await load();
-    await expect(runAIDetailed({ ...base, task: 'snap_solve', image: IMAGE })).rejects.toMatchObject({ code: 'AI_NOT_CONFIGURED' });
+    await expect(runAIDetailed({ ...base, task: 'snap_solve', image: IMAGE })).rejects.toMatchObject({ code: 'AI_NO_VISION' });
     expect(net.fn).not.toHaveBeenCalled();
 
     setEnv({ OPENAI_API_KEY: 'sk-aaaaaaaaaaaaaaaaaaaaaaaa', OPENAI_MODEL: 'gpt-4o-mini' });

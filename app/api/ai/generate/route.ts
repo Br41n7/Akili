@@ -24,6 +24,8 @@ const PERSONAS: Record<string, string> = {
   socratic: 'Never give the direct answer. Guide through questions. Challenge assumptions.',
   exam: 'Focus on mark-scheme language, exam technique, and maximizing marks per question.',
   research: 'Peer-reviewer mode. Challenge assumptions. Reference principles. Be critical.',
+  // Internal: JSON-only planners (diagrams). Not a tutor voice.
+  planner: 'You are a precise JSON-producing planner. You do not chat.',
 };
 
 const bodySchema = z.object({

@@ -88,16 +88,18 @@ export default function LessonVisual({ lesson, projectId, userId, region, person
     );
   }
 
-  if (!eligible) return null;
+  // The gate is a cheap guess. A lesson it misses can still be drawn on request, at the cost of one AI request.
+  const manualOnly = !stored && !curated && !gate.consider;
+  if (!eligible && !manualOnly) return null;
   if (phase === 'loading') return <div aria-busy="true" aria-label="Preparing a diagram"><Skeleton className="h-40 w-full" /></div>;
   if (phase === 'failed') {
     return (
       <div className="flex items-center justify-between gap-3 rounded-xl bg-chalk p-3 text-sm text-muted" role="status">
-        <span>No diagram this time. The lesson is unaffected.</span>
+        <span>{error || 'No diagram this time.'} The lesson is unaffected.</span>
         <Button variant="quiet" onClick={run}>Try again</Button>
       </div>
     );
   }
-  if (!AUTO) return <Button variant="quiet" block onClick={run}><ImageIcon size={17} /> Show a diagram for this lesson</Button>;
+  if (manualOnly || !AUTO) return <Button variant="quiet" block onClick={run}><ImageIcon size={17} /> Draw a diagram for this lesson</Button>;
   return null;
 }

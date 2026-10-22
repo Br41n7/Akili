@@ -51,7 +51,17 @@ const SEQUENCE_TYPES: VisualType[] = ['process', 'cycle', 'flowchart', 'timeline
 
 const clean = (s: string) =>
   s.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/<\/?[a-z][^>]*>/gi, '').replace(/\s+/g, ' ').trim();
-const txt = (max: number) => z.string().transform(clean).pipe(z.string().min(1).max(max));
+/**
+ * Cut at a word boundary with an ellipsis. A long label or description is a cosmetic problem, so it is
+ * shortened rather than rejecting an otherwise valid diagram. Scientific consistency is still checked below.
+ */
+export function fit(s: string, max: number): string {
+  if (s.length <= max) return s;
+  const cut = s.slice(0, max - 1);
+  const space = cut.lastIndexOf(' ');
+  return `${(space > max * 0.6 ? cut.slice(0, space) : cut).replace(/[\s,;:.\-–]+$/, '')}…`;
+}
+const txt = (max: number) => z.string().transform(s => fit(clean(s), max)).pipe(z.string().min(1));
 
 export const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
 
@@ -316,9 +326,11 @@ export function normalizeRawSpec(raw: Obj, opts: { forceProvenance?: 'ai_generat
     out.view = (VIEWS as readonly string[]).includes(v) ? v : undefined;
   }
 
-  const elements = (Array.isArray(out.elements) ? out.elements : []).filter(isObj).map((e: Obj) => ({
+  const elements = (Array.isArray(out.elements) ? out.elements : []).filter(isObj).slice(0, LIMITS.elements).map((e: Obj) => ({
     ...e,
     id: slug(String(e.id ?? e.label ?? '')),
+    // "Cα" or "Ca2+" become "C" / "Ca"; anything that is not an element symbol is dropped, never guessed.
+    symbol: typeof e.symbol === 'string' && /^[A-Z][a-z]?/.test(e.symbol.trim()) ? e.symbol.trim().match(/^[A-Z][a-z]?/)![0] : undefined,
     kind: typeof e.kind === 'string' && (ELEMENT_KINDS as readonly string[]).includes(lower(e.kind) as string) ? lower(e.kind) : undefined,
     section: isObj(e.section) && Number.isFinite(Number(e.section.angle)) && Number.isFinite(Number(e.section.span))
       ? { ring: slug(String(e.section.ring ?? '')), angle: ((Math.round(Number(e.section.angle)) % 360) + 360) % 360, span: Math.min(180, Math.max(10, Math.round(Number(e.section.span)))) } : undefined,
@@ -327,8 +339,16 @@ export function normalizeRawSpec(raw: Obj, opts: { forceProvenance?: 'ai_generat
   }));
   out.elements = elements;
 
+  // Missing descriptive metadata is filled from what the model did give. Nothing scientific is invented.
+  const firstLabel = typeof (elements[0] as Obj | undefined)?.label === 'string' ? String((elements[0] as Obj).label) : '';
+  const nameOf = (v: unknown) => (typeof v === 'string' && v.trim() ? v.trim() : '');
+  const title = nameOf(out.title) || nameOf(out.topic) || firstLabel;
+  out.title = title;
+  out.topic = nameOf(out.topic) || title;
+  out.learning_goal = nameOf(out.learning_goal) || (title ? `Understand ${title}` : '');
+
   const known = new Set(elements.map((e: Obj) => e.id));
-  out.relationships = (Array.isArray(out.relationships) ? out.relationships : []).filter(isObj).flatMap((r: Obj) => {
+  out.relationships = (Array.isArray(out.relationships) ? out.relationships : []).filter(isObj).slice(0, LIMITS.relationships * 2).flatMap((r: Obj) => {
     const relation = canonicalRelation(r.relation);
     if (!relation) return [];
     const from = slug(String(r.from ?? '')); const to = slug(String(r.to ?? ''));
@@ -339,16 +359,17 @@ export function normalizeRawSpec(raw: Obj, opts: { forceProvenance?: 'ai_generat
     const labelRole = typeof r.label === 'string' ? (lower(r.label) as string) : '';
     const role = relation === 'attaches_to' ? ((ATTACHMENT_ROLES as readonly string[]).includes(rawRole) ? rawRole : (ATTACHMENT_ROLES as readonly string[]).includes(labelRole) ? labelRole : undefined) : undefined;
     return [{ from, to, relation, label: r.label, bond_kind, bond_order: Number.isInteger(order) ? order : undefined, role }];
-  });
+  }).slice(0, LIMITS.relationships);
 
   const seq = (Array.isArray(out.sequence) ? out.sequence : []).map((s: unknown) => slug(String(s))).filter((s: string) => known.has(s));
-  out.sequence = [...new Set<string>(seq)];
+  out.sequence = [...new Set<string>(seq)].slice(0, LIMITS.elements);
   if (SEQUENCE_TYPES.includes(out.visual_type) && out.sequence.length < 2) out.sequence = elements.filter((e: Obj) => !e.section).map((e: Obj) => e.id);
 
-  out.steps = (Array.isArray(out.steps) ? out.steps : []).filter(isObj).map((s: Obj) => ({
+  out.steps = (Array.isArray(out.steps) ? out.steps : []).filter(isObj).slice(0, LIMITS.steps).map((s: Obj) => ({
     ...s,
-    elements: (Array.isArray(s.elements) ? s.elements : []).map((x: unknown) => slug(String(x))).filter((x: string) => known.has(x)),
+    elements: (Array.isArray(s.elements) ? s.elements : []).map((x: unknown) => slug(String(x))).filter((x: string) => known.has(x)).slice(0, 8),
   }));
+  if (isObj(out.graph) && Array.isArray(out.graph.points)) out.graph = { ...out.graph, points: out.graph.points.slice(0, LIMITS.points) };
 
   if (isObj(out.axes)) {
     const axes: Obj = {};
@@ -383,8 +404,8 @@ export function normalizeRawSpec(raw: Obj, opts: { forceProvenance?: 'ai_generat
       const term = lower(axesRaw[side]) as string;
       if ((DIRECTION_TERMS as readonly string[]).includes(term)) axes[side] = term;
     }
-    return [{ view, ...(Object.keys(axes).length ? { axes } : {}), positions }];
-  });
+    return [{ view, ...(Object.keys(axes).length ? { axes } : {}), positions: positions.slice(0, 24) }];
+  }).slice(0, 6);
 
   if (opts.forceProvenance) out.provenance = opts.forceProvenance;
   else if (out.provenance !== 'curated' && out.provenance !== 'curated_reviewed') out.provenance = 'ai_generated';
@@ -414,8 +435,11 @@ export function validateVisualDecision(data: unknown): Validation<VisualDecision
   const needs = data.needs_visual === true || data.needs_visual === 'true';
   const reason = typeof data.visual_reason === 'string' ? clean(data.visual_reason).slice(0, 300) : undefined;
   if (!needs) return { ok: true, data: { needs_visual: false, ...(reason ? { visual_reason: reason } : {}) } };
+  // Two shapes are valid: the model's flat JSON, and this function's own output ({ needs_visual, spec }).
+  // The server validates once and the client validates again on what the server returns, so the second
+  // pass sees the nested shape. Accepting only the flat one made every AI diagram fail on the client.
   const { needs_visual: _drop, ...rest } = data;
-  const spec = parseVisualSpec(rest, { forceProvenance: 'ai_generated' });
+  const spec = parseVisualSpec(isObj(data.spec) ? data.spec : rest, { forceProvenance: 'ai_generated' });
   if (!spec.ok) return { ok: false, error: spec.error };
   return { ok: true, data: { needs_visual: true, visual_reason: spec.data.visual_reason, spec: spec.data } };
 }
