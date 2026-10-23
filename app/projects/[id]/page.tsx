@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import {
-  ArrowLeft, BarChart3, BookOpen, Brain, FileText, GraduationCap, HelpCircle, MessageSquare,
+  ArrowLeft, BarChart3, BookOpen, Brain, Lightbulb, FileText, GraduationCap, HelpCircle, MessageSquare,
   MoreHorizontal, ShieldAlert, Sparkles, X, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -15,6 +15,7 @@ import QuizMode from '@/components/QuizMode';
 import ExamMode from '@/components/ExamMode';
 import Flashcards from '@/components/Flashcards';
 import StudyTools from '@/components/StudyTools';
+import HelpTools from '@/components/HelpTools';
 import AskAI from '@/components/AskAI';
 import TopicAnalysis from '@/components/TopicAnalysis';
 import Materials from '@/components/Materials';
@@ -23,7 +24,7 @@ import ResearchLab from '@/components/ResearchLab';
 import QuickNoteModal from '@/components/QuickNoteModal';
 import ProjectSidebar from '@/components/ProjectSidebar';
 
-type Tab = 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'study' | 'ask' | 'analysis' | 'progress' | 'research';
+type Tab = 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'study' | 'help' | 'ask' | 'analysis' | 'progress' | 'research';
 
 interface TabDef { id: Tab; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; desc: string }
 
@@ -34,6 +35,7 @@ const TABS: TabDef[] = [
   { id: 'exam', label: 'Exam', icon: ShieldAlert, desc: 'Timed mock exam' },
   { id: 'ask', label: 'Ask AI', icon: MessageSquare, desc: 'Ask questions about your notes' },
   { id: 'flashcards', label: 'Flashcards', icon: Sparkles, desc: 'Memory aids' },
+  { id: 'help', label: 'Get unstuck', icon: Lightbulb, desc: 'Simple explanations and quick methods' },
   { id: 'study', label: 'Study', icon: BookOpen, desc: 'Guides, slides, mind maps' },
   { id: 'analysis', label: 'Topic analysis', icon: BarChart3, desc: 'What comes up most' },
   { id: 'progress', label: 'Progress', icon: Brain, desc: 'Strong and weak concepts' },
@@ -163,6 +165,7 @@ export default function ProjectPage() {
         {tab === 'progress' && <LearningProgress projectId={projectId} userId={user.id} />}
         {tab === 'quiz' && <QuizMode projectId={projectId} userId={user.id} region={region} persona={persona} onGoToMaterials={() => setTab('materials')} />}
         {tab === 'exam' && <ExamMode projectId={projectId} userId={user.id} region={region} persona={persona} onGoToMaterials={() => setTab('materials')} />}
+        {tab === 'help' && <HelpTools projectId={projectId} userId={user.id} region={region} />}
         {tab === 'study' && <StudyTools projectId={projectId} userId={user.id} region={region} onGoToMaterials={() => setTab('materials')} />}
         {tab === 'flashcards' && <Flashcards projectId={projectId} userId={user.id} region={region} />}
         {tab === 'ask' && <AskAI projectId={projectId} userId={user.id} region={region} persona={persona} onGoToMaterials={() => setTab('materials')} />}

@@ -268,6 +268,42 @@ export function normalizeKnowledgeGraph(data: unknown): Validation<Obj> {
   return ok({ title: clip(data.title, 100) || 'Knowledge graph', nodes: kept, edges });
 }
 
+
+// ── Confusion recovery and shortcuts ─────────────────────────────────────────
+
+export function normalizeConfusion(data: unknown): Validation<Obj> {
+  if (!isObj(data)) return fail('expected an explanation object');
+  const explanation = clip(data.simple_explanation ?? data.explanation, 1200);
+  if (explanation.length < 20) return fail('the explanation is missing or too short');
+  const steps = (Array.isArray(data.steps) ? data.steps : []).flatMap((st: unknown) => {
+    const o = isObj(st) ? st : { text: st };
+    const text = clip(o.text, 500); return text ? [{ title: clip(o.title, 80), text }] : [];
+  }).slice(0, 6);
+  if (steps.length < 2) return fail('the explanation needs at least 2 steps');
+  const check = isObj(data.check) ? data.check : {};
+  const question = clip(check.question, 400), answer = clip(check.answer, 400);
+  if (!question || !answer) return fail('the self-check needs a question and an answer');
+  return ok({
+    likely_confusion: clip(data.likely_confusion, 400), simple_explanation: explanation, analogy: clip(data.analogy, 500),
+    steps, check: { question, answer }, if_still_stuck: clip(data.if_still_stuck, 300),
+  });
+}
+
+export function normalizeShortcuts(data: unknown): Validation<Obj> {
+  if (!isObj(data)) return fail('expected a shortcuts object');
+  const methods = (Array.isArray(data.methods) ? data.methods : []).flatMap((raw: unknown) => {
+    if (!isObj(raw)) return [];
+    const ex = isObj(raw.example) ? raw.example : {};
+    const name = clip(raw.name, 100), steps = strList(raw.steps).map(x => x.slice(0, 300)).slice(0, 6);
+    const problem = clip(ex.problem, 300), answer = clip(ex.answer, 200);
+    // A method without a worked example and answer cannot be trusted or checked by the learner.
+    if (!name || steps.length < 2 || !problem || !answer) return [];
+    return [{ name, when_to_use: clip(raw.when_to_use, 400), steps, example: { problem, working: strList(ex.working).map(x => x.slice(0, 250)).slice(0, 8), answer }, watch_out: clip(raw.watch_out, 300) }];
+  }).slice(0, 3);
+  if (!methods.length) return fail('no method had a name, steps and a worked example with an answer');
+  return ok({ topic: clip(data.topic, 120), methods });
+}
+
 const questionSet = (min: number, prefix: string) => (data: unknown): Validation<{ questions: NormalizedQuestion[]; [k: string]: unknown }> => {
   const root = Array.isArray(data) ? { questions: data } : data;
   if (!isObj(root)) return fail('expected an object with a questions array');
@@ -494,6 +530,17 @@ export const KnowledgeGraphSchema = z.object({
   edges: z.array(z.object({ from: z.string().min(1), to: z.string().min(1), relation: z.string().min(1) })).min(3).max(28),
 });
 
+
+export const ConfusionSchema = z.object({
+  likely_confusion: zText, simple_explanation: z.string().min(20), analogy: zText,
+  steps: z.array(z.object({ title: zText, text: z.string().min(1) })).min(2).max(6),
+  check: z.object({ question: z.string().min(1), answer: z.string().min(1) }), if_still_stuck: zText,
+});
+export const ShortcutsSchema = z.object({
+  topic: zText,
+  methods: z.array(z.object({ name: z.string().min(1), when_to_use: zText, steps: z.array(z.string().min(1)).min(2).max(6), example: z.object({ problem: z.string().min(1), working: zList, answer: z.string().min(1) }), watch_out: zText })).min(1).max(3),
+});
+
 const questionsSchema = (min: number) => z.object({ questions: z.array(QuestionSchema).min(min) }).passthrough();
 
 export const SCHEMAS: Record<string, z.ZodTypeAny> = {
@@ -505,6 +552,8 @@ export const SCHEMAS: Record<string, z.ZodTypeAny> = {
   study_guide: StudyGuideSchema,
   slide_deck: SlideDeckSchema,
   mind_map: MindMapSchema,
+  confusion: ConfusionSchema,
+  shortcut: ShortcutsSchema,
   knowledge_graph: KnowledgeGraphSchema,
   theory_feedback: z.object({ covered: z.array(z.number().int().min(0)), feedback: z.string().min(5), improvement: zText }).passthrough(),
   mnemonic: z.object({ mnemonic: z.string().min(1), explanation: zText, breakdown: z.array(z.object({ letter: z.string().min(1), item: z.string().min(1) })) }),
@@ -537,6 +586,8 @@ const RAW_VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
   study_guide: normalizeStudyGuide,
   slide_deck: normalizeSlideDeck,
   mind_map: normalizeMindMap,
+  confusion: normalizeConfusion,
+  shortcut: normalizeShortcuts,
   knowledge_graph: normalizeKnowledgeGraph,
   theory_feedback: theoryFeedback,
   flashcard,
