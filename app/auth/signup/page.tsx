@@ -45,8 +45,8 @@ function SignupForm() {
       toast.success('Account created! Check your email to confirm.');
 
       // If coming from PastQ import, redirect there
-      if (form.bank_id && form.ref) {
-        router.push(`/import?bank=${form.bank_id}&ref=${form.ref}`);
+      if (form.bank_id) {
+        router.push(`/import?bank=${encodeURIComponent(form.bank_id)}${form.ref ? `&ref=${encodeURIComponent(form.ref)}` : ''}`);
       } else {
         router.push('/projects');
       }
@@ -57,7 +57,7 @@ function SignupForm() {
     }
   };
 
-  const comingFromPastQ = !!(form.bank_id && form.ref);
+  const comingFromPastQ = !!form.bank_id;
 
   return (
     <div className="min-h-screen bg-[#F8F8F8] flex items-center justify-center p-4">

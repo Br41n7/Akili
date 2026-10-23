@@ -27,6 +27,7 @@ function ImportContent() {
 
   const [result, setResult] = useState<any>(null);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState('');
   const [bank, setBank] = useState<any>(null);
 
   useEffect(() => {
@@ -126,6 +127,7 @@ function ImportContent() {
         const data = await res.json();
 
         if (!res.ok || data?.error) {
+          if (!cancelled) setErrorCode(data?.code || '');
           throw new Error(
             data?.error || 'Import failed'
           );
@@ -227,7 +229,7 @@ function ImportContent() {
             <h2 className="text-xl font-black">
               {isImporting
                 ? 'Building your course...'
-                : 'Verifying purchase...'}
+                : 'Checking access...'}
             </h2>
 
             {bank && (
@@ -260,7 +262,7 @@ function ImportContent() {
                     : 'text-gray-400'
                 }`}
               >
-                Verifying PastQ purchase
+                Checking access to this bank
               </span>
             </div>
 
@@ -364,11 +366,11 @@ function ImportContent() {
             {error}
           </p>
 
-          <p className="text-xs text-gray-400">
-            This usually means the purchase wasn't
-            completed. Go back to PastQ and complete the
-            payment first.
-          </p>
+          {errorCode === 'NOT_PURCHASED' && (
+            <p className="text-xs text-gray-400">
+              Complete the payment on PastQ, then open the import link again.
+            </p>
+          )}
 
           <div className="flex gap-2">
             <a
