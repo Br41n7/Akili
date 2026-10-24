@@ -147,8 +147,9 @@ const envNumber = (name: string, fallback: number) => {
 const JSON_RULES =
   'OUTPUT FORMAT: Respond with a single valid JSON value only. No markdown fences and no commentary before or after it. Escape line breaks inside strings as \\n.';
 
-const geminiModels = (): string[] => {
-  const primary = env('GEMINI_MODEL') || 'gemini-3.8-flash';
+const geminiModels = (forImage = false): string[] => {
+  // GEMINI_VISION_MODEL lets you point pictures at a stronger (usually paid) model without changing text tasks.
+  const primary = (forImage && env('GEMINI_VISION_MODEL')) || env('GEMINI_MODEL') || 'gemini-3.8-flash';
   const fallbackEnv = process.env.GEMINI_FALLBACK_MODEL;
   const fallback = fallbackEnv === undefined ? 'gemini-3.7-flash' : fallbackEnv.trim();
   return Array.from(new Set([primary, fallback].filter(Boolean)));
@@ -186,7 +187,7 @@ export function providerCandidates(provider: ProviderId, opts: Pick<AIOptions, '
   switch (provider) {
     case 'gemini': {
       const apiKey = env('GEMINI_API_KEY');
-      return apiKey ? geminiModels().map(model => ({ provider, model, apiKey, userKey: false })) : [];
+      return apiKey ? geminiModels(wantsImage).map(model => ({ provider, model, apiKey, userKey: false })) : [];
     }
     case 'groq': {
       const apiKey = env('GROQ_API_KEY');

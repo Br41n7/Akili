@@ -93,8 +93,8 @@ describe('request validation', () => {
   it('rejects an image sent to a text-only task, and a missing image for an image task', async () => {
     const image = { base64: 'AAAA', mimeType: 'image/png' };
     expect((await call({ task: 'adaptive_tutor', image })).json.code).toBe('IMAGE_NOT_SUPPORTED');
-    expect((await call({ task: 'snap_solve' })).json.code).toBe('IMAGE_REQUIRED');
-    expect((await call({ task: 'snap_solve', image })).status).toBe(200);
+    expect((await call({ task: 'snap_read' })).json.code).toBe('IMAGE_REQUIRED');
+    expect((await call({ task: 'snap_read', image })).status).toBe(200);
   });
 
   it('does not paste arbitrary persona text into the system prompt', async () => {

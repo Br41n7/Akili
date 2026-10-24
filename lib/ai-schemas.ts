@@ -304,6 +304,69 @@ export function normalizeShortcuts(data: unknown): Validation<Obj> {
   return ok({ topic: clip(data.topic, 120), methods });
 }
 
+
+// ── SnapSolve and Concept Battle ─────────────────────────────────────────────
+
+export function normalizeSnapRead(data: unknown): Validation<Obj> {
+  if (!isObj(data)) return fail('expected a transcription object');
+  const text = clip(data.question_text ?? data.text, 3000);
+  const legible = data.legible === false || String(data.legible).toLowerCase() === 'false';
+  if (!text && !legible) return fail('nothing could be read from the picture');
+  const conf = str(data.confidence).toLowerCase();
+  return ok({
+    question_text: text,
+    diagram_description: clip(data.diagram_description, 800),
+    subject_guess: clip(data.subject_guess, 60),
+    // An unreadable photo is reported honestly instead of guessed at.
+    legible: !legible && !!text,
+    confidence: ['high', 'medium', 'low'].includes(conf) ? conf : 'medium',
+    uncertain: strList(data.uncertain).map(u => u.slice(0, 120)).slice(0, 8),
+  });
+}
+
+export function normalizeSnapSolve(data: unknown): Validation<Obj> {
+  if (!isObj(data)) return fail('expected a solution object');
+  const concept = clip(data.concept, 160);
+  const explanation = clip(data.explanation, 2000);
+  const steps = strList(data.solution_steps).map(x => x.slice(0, 600)).slice(0, 14);
+  if (!concept) return fail('the answer must name the concept being tested');
+  if (!explanation && !steps.length) return fail('the answer needs an explanation or steps');
+  return ok({
+    problem_type: clip(data.problem_type, 100), concept, explanation, solution_steps: steps,
+    final_answer: clip(data.final_answer, 400), shortcut_method: clip(data.shortcut_method, 500),
+    common_mistakes: strList(data.common_mistakes).map(x => x.slice(0, 250)).slice(0, 4),
+  });
+}
+
+export const BATTLE_ANSWERS = ['a', 'b', 'both', 'neither'] as const;
+
+export function normalizeConceptBattle(data: unknown): Validation<Obj> {
+  if (!isObj(data)) return fail('expected a battle object');
+  const concepts = strList(data.concepts).map(c => c.slice(0, 60));
+  if (concepts.length !== 2 || concepts[0].toLowerCase() === concepts[1].toLowerCase()) return fail('a battle needs exactly two different concepts');
+  const comparison = (Array.isArray(data.comparison) ? data.comparison : []).flatMap((r: unknown) => {
+    if (!isObj(r)) return [];
+    const feature = clip(r.feature, 80), a = clip(r.concept1 ?? r.a, 300), b = clip(r.concept2 ?? r.b, 300);
+    return feature && a && b ? [{ feature, a, b }] : [];
+  }).slice(0, 6);
+  if (comparison.length < 3) return fail('the comparison needs at least 3 rows');
+  const seen = new Set<string>();
+  const rounds = (Array.isArray(data.rounds) ? data.rounds : []).flatMap((r: unknown) => {
+    if (!isObj(r)) return [];
+    const statement = clip(r.statement, 300);
+    const raw = str(r.answer).toLowerCase();
+    // Accept the concept's own name as the answer too.
+    const answer = raw === concepts[0].toLowerCase() ? 'a' : raw === concepts[1].toLowerCase() ? 'b' : raw;
+    if (!statement || !(BATTLE_ANSWERS as readonly string[]).includes(answer) || seen.has(statement.toLowerCase())) return [];
+    seen.add(statement.toLowerCase());
+    return [{ statement, answer, explanation: clip(r.explanation, 400) }];
+  }).slice(0, 6);
+  if (rounds.length < 3) return fail('the battle needs at least 3 valid rounds');
+  // Rounds that all have one answer teach nothing about telling the concepts apart.
+  if (new Set(rounds.map(r => r.answer)).size < 2) return fail('the rounds must not all have the same answer');
+  return ok({ title: clip(data.title, 120) || `${concepts[0]} vs ${concepts[1]}`, concepts, comparison, analogy: clip(data.analogy, 500), scenario: clip(data.scenario, 500), rounds });
+}
+
 const questionSet = (min: number, prefix: string) => (data: unknown): Validation<{ questions: NormalizedQuestion[]; [k: string]: unknown }> => {
   const root = Array.isArray(data) ? { questions: data } : data;
   if (!isObj(root)) return fail('expected an object with a questions array');
@@ -541,6 +604,16 @@ export const ShortcutsSchema = z.object({
   methods: z.array(z.object({ name: z.string().min(1), when_to_use: zText, steps: z.array(z.string().min(1)).min(2).max(6), example: z.object({ problem: z.string().min(1), working: zList, answer: z.string().min(1) }), watch_out: zText })).min(1).max(3),
 });
 
+
+export const SnapReadSchema = z.object({ question_text: zText, diagram_description: zText, subject_guess: zText, legible: z.boolean(), confidence: z.enum(['high', 'medium', 'low']), uncertain: zList });
+export const SnapSolveSchema = z.object({ problem_type: zText, concept: z.string().min(1), explanation: zText, solution_steps: zList, final_answer: zText, shortcut_method: zText, common_mistakes: zList });
+export const ConceptBattleSchema = z.object({
+  title: z.string().min(1), concepts: z.array(z.string().min(1)).length(2),
+  comparison: z.array(z.object({ feature: z.string().min(1), a: z.string().min(1), b: z.string().min(1) })).min(3).max(6),
+  analogy: zText, scenario: zText,
+  rounds: z.array(z.object({ statement: z.string().min(1), answer: z.enum(['a', 'b', 'both', 'neither']), explanation: zText })).min(3).max(6),
+});
+
 const questionsSchema = (min: number) => z.object({ questions: z.array(QuestionSchema).min(min) }).passthrough();
 
 export const SCHEMAS: Record<string, z.ZodTypeAny> = {
@@ -553,6 +626,9 @@ export const SCHEMAS: Record<string, z.ZodTypeAny> = {
   slide_deck: SlideDeckSchema,
   mind_map: MindMapSchema,
   confusion: ConfusionSchema,
+  snap_read: SnapReadSchema,
+  snap_solve: SnapSolveSchema,
+  concept_battle: ConceptBattleSchema,
   shortcut: ShortcutsSchema,
   knowledge_graph: KnowledgeGraphSchema,
   theory_feedback: z.object({ covered: z.array(z.number().int().min(0)), feedback: z.string().min(5), improvement: zText }).passthrough(),
@@ -587,6 +663,9 @@ const RAW_VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
   slide_deck: normalizeSlideDeck,
   mind_map: normalizeMindMap,
   confusion: normalizeConfusion,
+  snap_read: normalizeSnapRead,
+  snap_solve: normalizeSnapSolve,
+  concept_battle: normalizeConceptBattle,
   shortcut: normalizeShortcuts,
   knowledge_graph: normalizeKnowledgeGraph,
   theory_feedback: theoryFeedback,

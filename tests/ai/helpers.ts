@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 
-export const KEYS = ['GEMINI_API_KEY', 'GROQ_API_KEY', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_VISION_MODEL', 'OPENAI_MODEL', 'AI_PROVIDER_ORDER', 'GROQ_FALLBACK_MODEL', 'GEMINI_FALLBACK_MODEL'] as const;
+export const KEYS = ['GEMINI_API_KEY', 'GROQ_API_KEY', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_VISION_MODEL', 'OPENAI_MODEL', 'AI_PROVIDER_ORDER', 'GROQ_FALLBACK_MODEL', 'GEMINI_FALLBACK_MODEL', 'GEMINI_VISION_MODEL', 'GEMINI_MODEL'] as const;
 
 /** Clear every provider variable, then set only the ones given. */
 export function setEnv(vars: Partial<Record<(typeof KEYS)[number], string>> = {}) {

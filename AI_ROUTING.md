@@ -29,10 +29,15 @@ a request with a key may use only that key.
 
 ## Environment
 `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY` (all optional, at least one needed),
-`GEMINI_MODEL`, `GROQ_MODEL`, `OPENAI_MODEL`, `DEEPSEEK_MODEL`, `GROQ_VISION_MODEL`,
+`GEMINI_MODEL`, `GROQ_MODEL`, `OPENAI_MODEL`, `DEEPSEEK_MODEL`, `GROQ_VISION_MODEL`, `GEMINI_VISION_MODEL` (a stronger Gemini model used only for pictures; text tasks keep `GEMINI_MODEL`),
 `AI_PROVIDER_ORDER` (operator override for every task), `AI_TIMEOUT_MS`, `AI_TOTAL_BUDGET_MS`.
 DeepSeek is preferred for routine text tasks (`mnemonic`, `shortcut`, `study_plan`) only when its key is set.
 It sends the prompt to a separate third-party API.
 
 ## Tests
 `tests/ai/` mocks `fetch` and Supabase, so no API credits are spent. Run `npm test`.
+
+
+## SnapSolve
+
+Two steps, on purpose. `snap_read` (picture required, Gemini first) transcribes the photo and lists what it is unsure of. The learner corrects the text. `snap_solve` (text only, any provider) then explains or solves the confirmed text. Photos are shrunk in the browser, sent once, and never stored.

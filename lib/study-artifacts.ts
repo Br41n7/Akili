@@ -4,9 +4,10 @@
  */
 import { MAX_SLIDES, MIN_SLIDES } from '@/lib/ai-schemas';
 import type { KnowledgeGraph, MindMap } from '@/lib/concept-maps';
+import type { Battle } from '@/lib/snap';
 
-export type ArtifactKind = 'study_guide' | 'slide_deck' | 'mind_map' | 'knowledge_graph';
-export const ARTIFACT_KINDS: ArtifactKind[] = ['study_guide', 'slide_deck', 'mind_map', 'knowledge_graph'];
+export type ArtifactKind = 'study_guide' | 'slide_deck' | 'mind_map' | 'knowledge_graph' | 'concept_battle';
+export const ARTIFACT_KINDS: ArtifactKind[] = ['study_guide', 'slide_deck', 'mind_map', 'knowledge_graph', 'concept_battle'];
 
 export interface Definition { term: string; meaning: string }
 export interface Formula { name: string; latex: string; explanation: string; variables: { symbol: string; meaning: string }[] }
@@ -25,7 +26,7 @@ export interface SlideDeck {
   slides: { title: string; bullets: string[]; speaker_notes: string; visual_hint: string }[];
 }
 
-export interface StoredArtifact { id: string; kind: ArtifactKind; title: string; content: StudyGuide | SlideDeck | MindMap | KnowledgeGraph; created_at: string }
+export interface StoredArtifact { id: string; kind: ArtifactKind; title: string; content: StudyGuide | SlideDeck | MindMap | KnowledgeGraph | Battle; created_at: string }
 
 export const SLIDE_PRESETS = [5, 8, 12, 15];
 export const DEFAULT_SLIDES = 8;

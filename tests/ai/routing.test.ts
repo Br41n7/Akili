@@ -185,7 +185,7 @@ describe('image input', () => {
     setEnv({ DEEPSEEK_API_KEY: 'dsk-aaaaaaaaaaaaaaaaaaaa' });
     const net = mockProviders({ deepseek: [{ text: 'ok' }] });
     const { runAIDetailed } = await load();
-    await expect(runAIDetailed({ ...base, task: 'snap_solve', image: IMAGE })).rejects.toMatchObject({ code: 'AI_NO_VISION' });
+    await expect(runAIDetailed({ ...base, task: 'snap_read', image: IMAGE })).rejects.toMatchObject({ code: 'AI_NO_VISION' });
     expect(net.fn).not.toHaveBeenCalled();
   });
 
@@ -193,7 +193,7 @@ describe('image input', () => {
     setEnv({ GROQ_API_KEY: 'gsk_aaaaaaaaaaaaaaaaaaaa', GEMINI_API_KEY: 'AIzaBBBBBBBBBBBBBBBBBBBBBBBB' });
     const net = mockProviders({ gemini: [{ text: 'seen' }] });
     const { runAIDetailed } = await load();
-    const r = await runAIDetailed({ ...base, task: 'snap_solve', image: IMAGE });
+    const r = await runAIDetailed({ ...base, task: 'snap_read', image: IMAGE });
     expect(r.provider).toBe('gemini');
     expect(net.count('groq')).toBe(0);
     expect(net.calls[0].body.contents[0].parts[0].inlineData.data).toBe('AAAA');
@@ -203,7 +203,7 @@ describe('image input', () => {
     setEnv({ GROQ_API_KEY: 'gsk_aaaaaaaaaaaaaaaaaaaa', GROQ_VISION_MODEL: 'vision-model-x', GEMINI_API_KEY: 'AIzaBBBBBBBBBBBBBBBBBBBBBBBB' });
     const net = mockProviders({ gemini: [{ status: 500 }, { status: 500 }], groq: [{ text: 'seen by groq' }] });
     const { runAIDetailed } = await load();
-    const r = await runAIDetailed({ ...base, task: 'snap_solve', image: IMAGE });
+    const r = await runAIDetailed({ ...base, task: 'snap_read', image: IMAGE });
     expect(r.provider).toBe('groq');
     expect(r.model).toBe('vision-model-x');
   }, 15_000);
@@ -212,20 +212,20 @@ describe('image input', () => {
     setEnv({ OPENAI_API_KEY: 'sk-aaaaaaaaaaaaaaaaaaaaaaaa', OPENAI_MODEL: 'gpt-3.5-turbo' });
     let net = mockProviders({ openai: [{ text: 'ok' }] });
     let { runAIDetailed } = await load();
-    await expect(runAIDetailed({ ...base, task: 'snap_solve', image: IMAGE })).rejects.toMatchObject({ code: 'AI_NO_VISION' });
+    await expect(runAIDetailed({ ...base, task: 'snap_read', image: IMAGE })).rejects.toMatchObject({ code: 'AI_NO_VISION' });
     expect(net.fn).not.toHaveBeenCalled();
 
     setEnv({ OPENAI_API_KEY: 'sk-aaaaaaaaaaaaaaaaaaaaaaaa', OPENAI_MODEL: 'gpt-4o-mini' });
     net = mockProviders({ openai: [{ text: 'ok' }] });
     ({ runAIDetailed } = await load());
-    expect((await runAIDetailed({ ...base, task: 'snap_solve', image: IMAGE })).provider).toBe('openai');
+    expect((await runAIDetailed({ ...base, task: 'snap_read', image: IMAGE })).provider).toBe('openai');
   });
 
   it('does not use a personal Groq key for images', async () => {
     setEnv({ GEMINI_API_KEY: 'AIzaBBBBBBBBBBBBBBBBBBBBBBBB' });
     const net = mockProviders({ gemini: [{ text: 'ok' }] });
     const { runAIDetailed } = await load();
-    await runAIDetailed({ ...base, task: 'snap_solve', image: IMAGE, userGroqKey: 'gsk_personalkey123456' });
+    await runAIDetailed({ ...base, task: 'snap_read', image: IMAGE, userGroqKey: 'gsk_personalkey123456' });
     expect(net.count('groq')).toBe(0);
   });
 });

@@ -55,12 +55,14 @@ const list: TaskSpec[] = [
   // Structure and reasoning.
   { id: 'mind_map', providers: GROQ_FIRST, input: 'text', validation: 'mind_map', timeoutMs: BASE_MS, retries: 1 },
   { id: 'knowledge_graph', providers: GROQ_FIRST, input: 'text', validation: 'knowledge_graph', timeoutMs: BASE_MS, retries: 1 },
-  { id: 'concept_battle', providers: GEMINI_FIRST, input: 'text', timeoutMs: BASE_MS, retries: 1 },
+  { id: 'concept_battle', providers: GEMINI_FIRST, input: 'text', validation: 'concept_battle', timeoutMs: BASE_MS, retries: 1 },
   { id: 'confusion', providers: GEMINI_FIRST, input: 'text', validation: 'confusion', timeoutMs: BASE_MS, retries: 1, lowEffort: true },
   { id: 'theory_feedback', providers: GEMINI_FIRST, input: 'text', validation: 'theory_feedback', timeoutMs: BASE_MS, retries: 1, lowEffort: true },
 
   // Images: only providers that can read them are ever tried.
-  { id: 'snap_solve', providers: VISION, input: 'image', timeoutMs: BASE_MS, retries: 1 },
+  // SnapSolve is two steps: read the picture (needs vision), then solve the confirmed text (any provider).
+  { id: 'snap_read', providers: VISION, input: 'image', validation: 'snap_read', timeoutMs: BASE_MS, retries: 1 },
+  { id: 'snap_solve', providers: GEMINI_FIRST, input: 'text', validation: 'snap_solve', timeoutMs: HEAVY_MS, retries: 1 },
   { id: 'ocr_extraction', providers: VISION, input: 'image', timeoutMs: BASE_MS, retries: 1 },
   { id: 'diagram_question', providers: VISION, input: 'either', validation: 'visual_question', timeoutMs: BASE_MS, retries: 1 },
   { id: 'visual_explain', providers: ['gemini', 'groq', 'openai'], input: 'either', validation: 'visual_explain', timeoutMs: BASE_MS, retries: 1, lowEffort: true },
