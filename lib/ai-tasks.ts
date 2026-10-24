@@ -45,6 +45,7 @@ const list: TaskSpec[] = [
   // Bulk structured generation: Groq first to spare Gemini quota.
   { id: 'course_builder', providers: GROQ_FIRST, input: 'text', validation: 'course', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
   { id: 'study_guide', providers: GROQ_FIRST, input: 'text', validation: 'study_guide', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
+  { id: 'infographic', providers: GROQ_FIRST, input: 'text', validation: 'infographic', timeoutMs: BASE_MS, retries: 1 },
   { id: 'slide_deck', providers: GROQ_FIRST, input: 'text', validation: 'slide_deck', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
 
   // Routine text transformations: DeepSeek first when configured.

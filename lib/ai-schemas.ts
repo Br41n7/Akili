@@ -367,6 +367,34 @@ export function normalizeConceptBattle(data: unknown): Validation<Obj> {
   return ok({ title: clip(data.title, 120) || `${concepts[0]} vs ${concepts[1]}`, concepts, comparison, analogy: clip(data.analogy, 500), scenario: clip(data.scenario, 500), rounds });
 }
 
+
+// ── Infographic ──────────────────────────────────────────────────────────────
+
+export function normalizeInfographic(data: unknown): Validation<Obj> {
+  if (!isObj(data)) return fail('expected an infographic object');
+  const sections: Obj[] = []; const seen = new Set<string>();
+  (Array.isArray(data.sections) ? data.sections : []).forEach((raw: unknown) => {
+    if (!isObj(raw) || sections.length >= 8) return;
+    const heading = clip(raw.heading ?? raw.title, 60);
+    if (!heading || seen.has(heading.toLowerCase())) return;
+    const bullets = (Array.isArray(raw.bullets) ? raw.bullets : []).flatMap((b: unknown) => {
+      const o = isObj(b) ? b : { text: b };
+      const text = clip(o.text, 160);
+      return text ? [{ text, sub: strList(o.sub).map(x => x.slice(0, 120)).slice(0, 3) }] : [];
+    }).slice(0, 7);
+    if (!bullets.length) return;
+    seen.add(heading.toLowerCase()); sections.push({ heading, bullets });
+  });
+  if (sections.length < 3) return fail('the infographic needs at least 3 sections, each with a heading and bullets');
+  const ex = isObj(data.extra) ? data.extra : null;
+  const items = ex ? strList(ex.items).map(x => x.slice(0, 160)).slice(0, 6) : [];
+  const extra = ex && clip(ex.title, 40) && items.length ? { title: clip(ex.title, 40), items } : null;
+  return ok({
+    title: clip(data.title, 100) || sections[0].heading, subtitle: clip(data.subtitle, 140), sections,
+    key_points: strList(data.key_points).map(x => x.slice(0, 160)).slice(0, 6), extra,
+  });
+}
+
 const questionSet = (min: number, prefix: string) => (data: unknown): Validation<{ questions: NormalizedQuestion[]; [k: string]: unknown }> => {
   const root = Array.isArray(data) ? { questions: data } : data;
   if (!isObj(root)) return fail('expected an object with a questions array');
@@ -614,6 +642,13 @@ export const ConceptBattleSchema = z.object({
   rounds: z.array(z.object({ statement: z.string().min(1), answer: z.enum(['a', 'b', 'both', 'neither']), explanation: zText })).min(3).max(6),
 });
 
+
+export const InfographicSchema = z.object({
+  title: z.string().min(1), subtitle: zText,
+  sections: z.array(z.object({ heading: z.string().min(1), bullets: z.array(z.object({ text: z.string().min(1), sub: zList })).min(1).max(7) })).min(3).max(8),
+  key_points: zList, extra: z.object({ title: z.string().min(1), items: z.array(z.string().min(1)).min(1).max(6) }).nullable(),
+});
+
 const questionsSchema = (min: number) => z.object({ questions: z.array(QuestionSchema).min(min) }).passthrough();
 
 export const SCHEMAS: Record<string, z.ZodTypeAny> = {
@@ -626,6 +661,7 @@ export const SCHEMAS: Record<string, z.ZodTypeAny> = {
   slide_deck: SlideDeckSchema,
   mind_map: MindMapSchema,
   confusion: ConfusionSchema,
+  infographic: InfographicSchema,
   snap_read: SnapReadSchema,
   snap_solve: SnapSolveSchema,
   concept_battle: ConceptBattleSchema,
@@ -663,6 +699,7 @@ const RAW_VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
   slide_deck: normalizeSlideDeck,
   mind_map: normalizeMindMap,
   confusion: normalizeConfusion,
+  infographic: normalizeInfographic,
   snap_read: normalizeSnapRead,
   snap_solve: normalizeSnapSolve,
   concept_battle: normalizeConceptBattle,

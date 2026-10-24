@@ -12,5 +12,6 @@ Back up the database first. Files `0002` onward are written to be re-runnable.
 | 0005_security_hardening.sql | Storage policy and function privilege fixes |
 | 0006_ai_usage_atomic.sql | Atomic daily AI quota function |
 | 0007_study_artifacts.sql | Study guides and slide decks (generic table with RLS) |
+| 0008_infographic_kind.sql | Adds the infographic kind (run after 0007) |
 
 `o.sql` was removed: every statement in it already exists in `0002_adaptive.sql`.

@@ -1,5 +1,5 @@
 'use client';
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createContext, useContext, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Minus, Plus } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { VisualSpec } from '@/lib/visual/schema';
@@ -37,6 +37,9 @@ export function SvgText({ lines, x, y, size = 13, weight = 700, fill = C.ink, li
   );
 }
 
+/** True where a diagram is captured as a picture (the infographic): no zoom bar, no gestures. */
+export const StaticFigureContext = createContext(false);
+
 export const ZOOM_MIN = 1;
 export const ZOOM_MAX = 3;
 
@@ -52,6 +55,7 @@ export function pinchZoom(startDist: number, curDist: number, startZoom: number,
  * gesture zooms the diagram instead of the whole screen.
  */
 export function ZoomFrame({ children, label }: { children: (zoom: number) => ReactNode; label: string }) {
+  const isStatic = useContext(StaticFigureContext);
   const [zoom, setZoom] = useState(1);
   const box = useRef<HTMLDivElement>(null);
   const prev = useRef(1);
@@ -82,6 +86,8 @@ export function ZoomFrame({ children, label }: { children: (zoom: number) => Rea
     pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) pinch.current = null;
   };
+
+  if (isStatic) return <div className="overflow-hidden rounded-xl border border-rule bg-chalk">{children(1)}</div>;
 
   return (
     <div>

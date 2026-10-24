@@ -18,7 +18,7 @@ import MechanismDiagram from './MechanismDiagram';
 import MolecularStructureDiagram from './MolecularStructureDiagram';
 import ProcessDiagram from './ProcessDiagram';
 import VisualQuiz from './VisualQuiz';
-import type { DiagramProps } from './shared';
+import { StaticFigureContext, type DiagramProps } from './shared';
 
 /**
  * The only place that maps a visual_type to a component. To add a type: extend VISUAL_TYPES in
@@ -49,6 +49,13 @@ export interface VisualRendererProps {
   /** Offered after repeated misses; should request a simpler diagram. */
   onSimplify?: () => void;
   simplifying?: boolean;
+}
+
+/** The diagram alone: no buttons, no quiz, no selection. Used where a picture must be captured, such as the infographic. */
+export function StaticVisual({ visualSpec }: { visualSpec: unknown }) {
+  const spec = useMemo(() => safeVisualSpec(visualSpec), [visualSpec]);
+  if (!spec || !REGISTRY[spec.visual_type]) return null;
+  return <StaticFigureContext.Provider value>{REGISTRY[spec.visual_type]({ spec, selectedId: null, onSelect: () => {}, showLabels: true })}</StaticFigureContext.Provider>;
 }
 
 export default function VisualRenderer({ visualSpec, ai, onAnswer, onSimplify, simplifying }: VisualRendererProps) {

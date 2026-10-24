@@ -2,12 +2,15 @@
 import React, { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { callAIJSON, errorMessage, formatDate } from '@/lib/utils';
-import { BookOpen, ChevronLeft, ChevronRight, Download, GitBranch, Network, Presentation, Swords, Trash2, Sparkles } from 'lucide-react';
+import { BookOpen, ChevronLeft, ChevronRight, Download, GitBranch, Network, LayoutTemplate, Presentation, Swords, Trash2, Sparkles } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Button, ChoiceChips, ConfirmDialog, EmptyState, ErrorState, Field, GeneratingPanel, ListSkeleton, Prose, Segmented, TextInput } from '@/components/ui';
 import TeX from '@/components/Math';
 import { KnowledgeGraphView, MindMapView } from '@/components/ConceptMapView';
 import BattleView from '@/components/BattleView';
+import InfographicView from '@/components/InfographicView';
+import { findFigure } from '@/lib/infographic-figure';
+import { buildInfographicPrompt, infographicToMarkdown, type Infographic } from '@/lib/infographic';
 import { battleToMarkdown, buildBattlePrompt, type Battle } from '@/lib/snap';
 import { buildKnowledgeGraphPrompt, buildMindMapPrompt, graphToMarkdown, mindMapToMarkdown, type KnowledgeGraph, type MindMap } from '@/lib/concept-maps';
 import {
@@ -18,10 +21,10 @@ import {
 interface Props { projectId: string; userId: string; region: string; onGoToMaterials?: () => void }
 
 const MAX_CONTEXT = 14000;
-const LABEL: Record<ArtifactKind, string> = { study_guide: 'Study guide', slide_deck: 'Slide deck', mind_map: 'Mind map', knowledge_graph: 'Knowledge graph', concept_battle: 'Concept battle' };
-const MAKE: Record<ArtifactKind, string> = { study_guide: 'Generate study guide', slide_deck: 'Generate slides', mind_map: 'Generate mind map', knowledge_graph: 'Generate knowledge graph', concept_battle: 'Start a battle' };
-const BUSY: Record<ArtifactKind, string> = { study_guide: 'Writing your study guide', slide_deck: 'Building your slides', mind_map: 'Drawing your mind map', knowledge_graph: 'Connecting the concepts', concept_battle: 'Preparing the arena' };
-const ICON: Record<ArtifactKind, React.ReactNode> = { study_guide: <BookOpen size={22} />, slide_deck: <Presentation size={22} />, mind_map: <GitBranch size={22} />, knowledge_graph: <Network size={22} />, concept_battle: <Swords size={22} /> };
+const LABEL: Record<ArtifactKind, string> = { study_guide: 'Study guide', slide_deck: 'Slide deck', mind_map: 'Mind map', knowledge_graph: 'Knowledge graph', concept_battle: 'Concept battle', infographic: 'Infographic' };
+const MAKE: Record<ArtifactKind, string> = { study_guide: 'Generate study guide', slide_deck: 'Generate slides', mind_map: 'Generate mind map', knowledge_graph: 'Generate knowledge graph', concept_battle: 'Start a battle', infographic: 'Generate infographic' };
+const BUSY: Record<ArtifactKind, string> = { study_guide: 'Writing your study guide', slide_deck: 'Building your slides', mind_map: 'Drawing your mind map', knowledge_graph: 'Connecting the concepts', concept_battle: 'Preparing the arena', infographic: 'Designing your infographic' };
+const ICON: Record<ArtifactKind, React.ReactNode> = { study_guide: <BookOpen size={22} />, slide_deck: <Presentation size={22} />, mind_map: <GitBranch size={22} />, knowledge_graph: <Network size={22} />, concept_battle: <Swords size={22} />, infographic: <LayoutTemplate size={22} /> };
 
 function toMarkdown(x: StoredArtifact): string {
   switch (x.kind) {
@@ -29,6 +32,7 @@ function toMarkdown(x: StoredArtifact): string {
     case 'slide_deck': return deckToMarkdown(x.content as SlideDeck);
     case 'mind_map': return mindMapToMarkdown(x.content as MindMap);
     case 'knowledge_graph': return graphToMarkdown(x.content as KnowledgeGraph);
+    case 'infographic': return infographicToMarkdown(x.content as Infographic);
     default: return battleToMarkdown(x.content as Battle);
   }
 }
@@ -99,6 +103,7 @@ export function StudyTools({ projectId, userId, region, onGoToMaterials }: Props
   const [kind, setKind] = useState<ArtifactKind>('study_guide');
   const [topic, setTopic] = useState('');
   const [topicB, setTopicB] = useState('');
+  const [withFigure, setWithFigure] = useState(true);
   const [count, setCount] = useState(DEFAULT_SLIDES);
   const [items, setItems] = useState<StoredArtifact[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -130,8 +135,14 @@ export function StudyTools({ projectId, userId, region, onGoToMaterials }: Props
       const prompt = kind === 'study_guide' ? buildStudyGuidePrompt({ topic: t, context })
         : kind === 'slide_deck' ? buildSlideDeckPrompt({ topic: t, context, count: clampSlides(count) })
         : kind === 'mind_map' ? buildMindMapPrompt({ topic: t, context })
+        : kind === 'infographic' ? buildInfographicPrompt({ topic: t, context })
         : kind === 'concept_battle' ? buildBattlePrompt({ a: t, b: topicB.trim(), context }) : buildKnowledgeGraphPrompt({ topic: t, context });
       const content = await callAIJSON<{ title: string }>({ task: kind, prompt, region, projectId, validationType: kind, persona: 'friendly' });
+      let figureNote = '';
+      if (kind === 'infographic' && withFigure) {
+        const f = await findFigure(content as unknown as Infographic, { projectId, region });
+        (content as unknown as Infographic).figure = f.figure; figureNote = f.note;
+      }
       const { data: row, error } = await supabase.from('study_artifacts')
         .insert({ project_id: projectId, user_id: userId, kind, title: content.title, content })
         .select('id, kind, title, content, created_at').single();
@@ -139,6 +150,7 @@ export function StudyTools({ projectId, userId, region, onGoToMaterials }: Props
       setItems(p => [row as StoredArtifact, ...p]);
       setOpenId((row as StoredArtifact).id);
       toast.success(`${LABEL[kind]} ready`);
+      if (figureNote) toast(figureNote);
     } catch (err) {
       setGenError(errorMessage(err, 'Could not generate that. Please try again.'));
     } finally { setGenerating(false); }
@@ -159,7 +171,7 @@ export function StudyTools({ projectId, userId, region, onGoToMaterials }: Props
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4">
       <div className="space-y-3 rounded-2xl border border-rule bg-paper p-4">
-        <Segmented<ArtifactKind> label="What to make" value={kind} onChange={k => { setKind(k); setOpenId(null); }} options={[{ value: 'study_guide', label: 'Study guide' }, { value: 'slide_deck', label: 'Slides' }, { value: 'mind_map', label: 'Mind map' }, { value: 'knowledge_graph', label: 'Graph' }, { value: 'concept_battle', label: 'Battle' }]} />
+        <Segmented<ArtifactKind> label="What to make" value={kind} onChange={k => { setKind(k); setOpenId(null); }} options={[{ value: 'study_guide', label: 'Study guide' }, { value: 'slide_deck', label: 'Slides' }, { value: 'infographic', label: 'Infographic' }, { value: 'mind_map', label: 'Mind map' }, { value: 'knowledge_graph', label: 'Graph' }, { value: 'concept_battle', label: 'Battle' }]} />
         {kind === 'concept_battle' ? (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="First concept" htmlFor="st-topic"><TextInput id="st-topic" value={topic} onChange={e => setTopic(e.target.value)} placeholder="e.g. Mitosis" maxLength={60} /></Field>
@@ -169,6 +181,9 @@ export function StudyTools({ projectId, userId, region, onGoToMaterials }: Props
           <Field label="Topic (optional)" htmlFor="st-topic">
             <TextInput id="st-topic" value={topic} onChange={e => setTopic(e.target.value)} placeholder="Leave blank to cover all your materials" maxLength={120} />
           </Field>
+        )}
+        {kind === 'infographic' && (
+          <label className="flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" checked={withFigure} onChange={e => setWithFigure(e.target.checked)} className="h-5 w-5" /> Add a figure when the topic suits one (uses one more AI request)</label>
         )}
         {kind === 'slide_deck' && (
           <ChoiceChips<string> label="Number of slides" value={String(count)} onChange={v => setCount(clampSlides(v))} options={SLIDE_PRESETS.map(n => ({ value: String(n), label: String(n) }))} />
@@ -189,7 +204,8 @@ export function StudyTools({ projectId, userId, region, onGoToMaterials }: Props
           {open.kind === 'study_guide' ? <GuideView g={open.content as StudyGuide} />
             : open.kind === 'slide_deck' ? <DeckView d={open.content as SlideDeck} />
             : open.kind === 'mind_map' ? <MindMapView m={open.content as MindMap} />
-            : open.kind === 'concept_battle' ? <BattleView b={open.content as Battle} /> : <KnowledgeGraphView g={open.content as KnowledgeGraph} />}
+            : open.kind === 'concept_battle' ? <BattleView b={open.content as Battle} />
+            : open.kind === 'infographic' ? <InfographicView g={open.content as Infographic} /> : <KnowledgeGraphView g={open.content as KnowledgeGraph} />}
         </div>
       )}
 
