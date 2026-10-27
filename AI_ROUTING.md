@@ -41,3 +41,6 @@ It sends the prompt to a separate third-party API.
 ## SnapSolve
 
 Two steps, on purpose. `snap_read` (picture required, Gemini first) transcribes the photo and lists what it is unsure of. The learner corrects the text. `snap_solve` (text only, any provider) then explains or solves the confirmed text. Photos are shrunk in the browser, sent once, and never stored.
+
+## Course building
+`course_outline` (BASE timeout) writes module and lesson titles; `course_module` (HEAVY timeout) writes one module's lessons. The old whole-course task `course_builder` remains registered for older callers. See `COURSE_BUILD.md`.

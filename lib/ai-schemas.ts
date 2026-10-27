@@ -407,6 +407,15 @@ const questionSet = (min: number, prefix: string) => (data: unknown): Validation
 // Course
 // ─────────────────────────────────────────────────────────────────────────────
 
+const ORIGINS = ['notes', 'beyond_notes', 'web'] as const;
+const lessonOrigin = (v: unknown) => { const o = str(v).toLowerCase(); return (ORIGINS as readonly string[]).includes(o) ? o : undefined; };
+/** Only https links; a lesson never carries a link the learner could not safely open. */
+const lessonSources = (v: unknown) => (Array.isArray(v) ? v : []).flatMap((x: unknown) => {
+  if (!isObj(x)) return [];
+  const url = str(x.url);
+  return /^https:\/\/[^\s]+$/.test(url) ? [{ title: clip(x.title, 120) || url.slice(0, 80), url: url.slice(0, 500) }] : [];
+}).slice(0, 6);
+
 function normalizeCourse(data: unknown): Validation<Obj> {
   if (!isObj(data)) return fail('expected a course object');
   const rawModules = Array.isArray(data.modules) ? data.modules : [];
@@ -437,6 +446,8 @@ function normalizeCourse(data: unknown): Validation<Obj> {
         definitions: normalizeDefinitions(l.definitions),
         formulas: normalizeFormulas(l.formulas),
         exercises: normalizeExercises(l.exercises),
+        ...(lessonOrigin(l.origin) ? { origin: lessonOrigin(l.origin) } : {}),
+        ...(lessonSources(l.sources).length ? { sources: lessonSources(l.sources) } : {}),
       });
     });
     if (!lessons.length) return;
@@ -457,6 +468,35 @@ function normalizeCourse(data: unknown): Validation<Obj> {
     estimated_duration: str(data.estimated_duration),
     modules,
   });
+}
+
+/** The plan for a course: modules and lesson titles only. Written first, then each module is filled in. */
+export function normalizeCourseOutline(data: unknown): Validation<Obj> {
+  if (!isObj(data)) return fail('expected an outline object');
+  const seen = new Set<string>(); const modules: Obj[] = [];
+  (Array.isArray(data.modules) ? data.modules : []).forEach((m: unknown) => {
+    if (!isObj(m) || modules.length >= 10) return;
+    const title = clip(m.title, 100);
+    if (!title || seen.has(title.toLowerCase())) return;
+    const lessons = (Array.isArray(m.lessons) ? m.lessons : []).flatMap((l: unknown) => {
+      const o = isObj(l) ? l : { title: l };
+      const t = clip(o.title, 120);
+      return t ? [{ title: t, objective: clip(o.objective ?? o.summary, 200) }] : [];
+    }).slice(0, 6);
+    if (!lessons.length) return;
+    seen.add(title.toLowerCase()); modules.push({ title, summary: clip(m.summary, 300), lessons });
+  });
+  if (!modules.length) return fail('the outline needs at least one module with lesson titles');
+  return ok({ title: clip(data.title, 120) || 'Your course', description: clip(data.description, 500), estimated_duration: clip(data.estimated_duration, 60), modules });
+}
+
+/** One module's lessons, held to the same rules as a whole course. Ids are renumbered by the caller. */
+export function normalizeCourseModule(data: unknown): Validation<Obj> {
+  const root = Array.isArray(data) ? { lessons: data } : data;
+  if (!isObj(root)) return fail('expected a module object with lessons');
+  const v = normalizeCourse({ modules: [{ title: 'Module', lessons: root.lessons }] });
+  if (!v.ok) return v;
+  return ok({ lessons: ((v.data as Obj).modules as Obj[])[0].lessons });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -588,6 +628,12 @@ export const CourseSchema = z.object({
 }).passthrough();
 
 
+export const CourseOutlineSchema = z.object({
+  title: z.string().min(1), description: zText, estimated_duration: zText,
+  modules: z.array(z.object({ title: z.string().min(1), summary: zText, lessons: z.array(z.object({ title: z.string().min(1), objective: zText })).min(1).max(6) })).min(1).max(10),
+}).passthrough();
+export const CourseModuleSchema = z.object({ lessons: z.array(LessonSchema).min(1) });
+
 export const StudyGuideSchema = z.object({
   title: z.string().min(1),
   overview: zText,
@@ -653,6 +699,8 @@ const questionsSchema = (min: number) => z.object({ questions: z.array(QuestionS
 
 export const SCHEMAS: Record<string, z.ZodTypeAny> = {
   course: CourseSchema,
+  course_outline: CourseOutlineSchema,
+  course_module: CourseModuleSchema,
   quiz: questionsSchema(3),
   exam: questionsSchema(5),
   quick_check: questionsSchema(1),
@@ -691,6 +739,8 @@ export function withSchema(name: string, schema: z.ZodTypeAny, normalize: (data:
 
 const RAW_VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
   course: normalizeCourse,
+  course_outline: normalizeCourseOutline,
+  course_module: normalizeCourseModule,
   quiz: questionSet(3, 'q'),
   exam: questionSet(5, 'q'),
   quick_check: questionSet(1, 'q'),

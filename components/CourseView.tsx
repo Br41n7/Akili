@@ -1,5 +1,10 @@
 'use client';
 import { addLesson, saveCompletedLessons } from '@/lib/course-progress';
+import CourseBuildForm from '@/components/CourseBuildForm';
+import {
+  DEFAULT_OPTIONS, DEPTHS, cleanGoals, fillModule, isPending, modulePrompt, nextPendingIndex, outlineContext, outlineOf, outlinePrompt, pendingModules,
+  selectContext, sizeFor, totalChars, type BuildOptions, type LearnerScope, type Source,
+} from '@/lib/course-builder';
 import LessonExtras from '@/components/LessonExtras';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -8,10 +13,10 @@ import { recordEvidence } from '@/lib/adaptive';
 import LessonVisual from '@/components/visual/LessonVisual';
 import { withLessonVisual, type StoredVisual } from '@/lib/visual/lesson';
 import { levelOf, studySubjectText, type ProjectRecord } from '@/lib/project-context';
-import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, Circle, GraduationCap, KeyRound, RefreshCw, Sparkles, TriangleAlert } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, ChevronDown, Circle, GraduationCap, KeyRound, Plus, RefreshCw, Sparkles, TriangleAlert } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
-  Button, ConfirmDialog, EmptyState, ErrorState, GeneratingPanel, OptionRow, ProgressBar, Prose, Skeleton, Surface, splitOption, type OptionState,
+  Button, EmptyState, ErrorState, GeneratingPanel, OptionRow, ProgressBar, Prose, Skeleton, Surface, TextInput, splitOption, type OptionState,
 } from '@/components/ui';
 
 interface Props {
@@ -23,9 +28,7 @@ interface Props {
 const STEPS = [
   'Reading your materials',
   'Planning modules and lessons',
-  'Writing lessons and worked examples',
-  'Writing practice questions',
-  'Checking everything fits together',
+  'Saving your course outline',
 ];
 
 export default function CourseView({ projectId, userId, region, persona, userGroqKey, onGoToMaterials }: Props) {
@@ -35,7 +38,12 @@ export default function CourseView({ projectId, userId, region, persona, userGro
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
-  const [confirmRegen, setConfirmRegen] = useState(false);
+  const [showRebuild, setShowRebuild] = useState(false);
+  const [opts, setOpts] = useState<BuildOptions>(DEFAULT_OPTIONS);
+  const [buildingIdx, setBuildingIdx] = useState<number | null>(null);
+  const [addTopic, setAddTopic] = useState('');
+  const [addBeyond, setAddBeyond] = useState(false);
+  const busyRef = useRef(false);
   const [openModule, setOpenModule] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -74,83 +82,92 @@ export default function CourseView({ projectId, userId, region, persona, userGro
   const done = progress.completed_lessons;
   const pct = lessons.length ? Math.round((done.length / lessons.length) * 100) : 0;
 
-  const generate = async () => {
-    setConfirmRegen(false);
-    setGenerating(true);
-    setGenError('');
+  const loadSources = async (): Promise<Source[]> => {
+    const [{ data: docs }, { data: notes }] = await Promise.all([
+      supabase.from('documents').select('content, name').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(20),
+      supabase.from('notes').select('content, title').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(30),
+    ]);
+    return [
+      ...(docs || []).map(d => ({ name: d.name || 'Document', content: d.content || '' })),
+      ...(notes || []).map(n => ({ name: n.title || 'Student note', content: n.content || '' })),
+    ].filter(x => x.content.trim());
+  };
+  const scope = (): LearnerScope => ({
+    topic: project ? studySubjectText(project) : 'the learner’s topic', secondary: project ? levelOf(project) === 'secondary' : false,
+    classLevel: String(project?.class_level || project?.study_year || ''), region,
+  });
+  const ai = (task: 'course_outline' | 'course_module', prompt: string) => callAIJSON<any>({ task, prompt, region, persona, userGroqKey, projectId, validationType: task });
+
+  /** Write one pending module and save it. Everything already saved stays saved if this one fails. */
+  const buildModule = async (index: number) => {
+    const current = courseRef.current; const m = current?.modules?.[index];
+    if (!current || !m || !isPending(m)) return;
+    const bopts: BuildOptions = { depth: opts.depth, goals: m.build_opts?.goals || '', beyondNotes: !!m.build_opts?.beyondNotes };
+    const sources = await loadSources();
+    const query = `${m.title} ${(m.outline || []).map((l: any) => `${l.title} ${l.objective}`).join(' ')}`;
+    const data = await ai('course_module', modulePrompt(scope(), bopts, current.modules.map((x: any) => x.title), outlineOf(m), m.module_number, selectContext(sources, query)));
+    const latest = courseRef.current; // lesson visuals may have been saved meanwhile
+    const modules = fillModule(latest.modules, index, data.lessons);
+    const { error } = await supabase.from('courses').update({ modules }).eq('id', latest.id).eq('user_id', userId);
+    if (error) throw new Error('The module was written but could not be saved. Please try again.');
+    courseRef.current = { ...latest, modules }; setCourse(courseRef.current);
+  };
+
+  const buildFrom = async (start = 0) => {
+    if (busyRef.current) return;
+    busyRef.current = true; setGenError('');
     try {
-      const [{ data: docs }, { data: notes }] = await Promise.all([
-        supabase.from('documents').select('content, name').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(5),
-        supabase.from('notes').select('content, title').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(10),
-      ]);
-      const context = [
-        ...(docs || []).map(d => `[UPLOADED MATERIAL: ${d.name}]\n${d.content}`),
-        ...(notes || []).map(n => `[STUDENT NOTE: ${n.title || 'Untitled note'}]\n${n.content}`),
-      ].join('\n\n').slice(0, 12000);
-      if (!context.trim()) {
-        setGenError('Add at least one document or note in Materials first. Akili builds the course from what you add.');
-        return;
+      for (let i = nextPendingIndex(courseRef.current?.modules || [], start); i >= 0; i = nextPendingIndex(courseRef.current?.modules || [], i + 1)) {
+        setBuildingIdx(i);
+        try { await buildModule(i); }
+        catch (err) { setGenError(`Module ${i + 1} could not be written. ${errorMessage(err, 'Please try again.')} Your other modules are saved.`); break; }
       }
+    } finally { busyRef.current = false; setBuildingIdx(null); }
+  };
 
-      const secondary = project ? levelOf(project) === 'secondary' : false;
-      const topic = project ? studySubjectText(project) : 'the learner’s topic';
-      const prompt = `Create a structured course on "${topic}" from the study materials below.
-
-Study materials:
-${context}
-
-Learner level and scope:
-- Education level: ${secondary ? 'Secondary / O-Level' : 'University / college'}.
-- Class/year: ${project?.class_level || project?.study_year || 'not specified'}.
-- Subject/course: ${topic}.
-- Adapt vocabulary, assumptions, worked examples, and question difficulty to this learner level. A secondary-school learner must not receive university-level questions or terminology unless the supplied material explicitly requires it.
-- Treat the supplied study materials as the authoritative scope. Do not introduce new subtopics, advanced facts, clinical details, or exam content that the materials do not teach.
-- If a prerequisite is essential, explain it briefly in a clearly marked "Prerequisite" note, using simple language; do not let it expand the lesson scope.
-- If the materials do not contain enough information to teach a requested topic accurately, say so in the lesson content instead of inventing details.
-
-Requirements:
-- Create 2 to 4 modules, each with 2 to 4 lessons, based only on topics actually present in the supplied materials.
-- Each lesson: learning objectives, ${secondary ? 'clear explanations of about 150–250 words' : 'a thorough explanation of about 250–350 words'} in markdown, key concepts, one worked example, common mistakes, and 3 practice questions.
-- Also per lesson, only where the supplied materials support them (use an empty array otherwise, never filler):
-  - "definitions": 2 to 6 key terms the materials define, each with a short plain-language meaning.
-  - "formulas": the equations or rules the materials use, for quantitative or scientific lessons. Write "latex" as bare TeX with no $ or \\( delimiters, e.g. "v = u + at", and list each symbol in "variables". Do not invent formulas.
-  - "exercises": 1 to 3 short open-ended exercises (not multiple choice) with a "hint", "solution_steps" and a final "answer".
-- Every practice question must be answerable from the lesson and supplied materials, and appropriate for the learner's education level. Four options labelled "A) ", "B) ", "C) ", "D) "; correct_answer is just the letter.
-- Use examples that make sense for a learner in ${region}, but do not allow cultural examples to introduce unrelated syllabus content.
-- Visual teaching is part of the lesson, not a separate unrelated feature. For each lesson where a structure, anatomy, molecule, process, cycle, comparison, hierarchy, or spatial relationship is central to understanding, include a concise visual brief in the lesson content using a heading "Visual explanation" and specify: what should be drawn, the essential labelled parts, and what each label means. For molecular topics such as proteins, describe the relevant structural level (primary, secondary, tertiary, or quaternary) only if supported by the supplied material. Do not fabricate detailed scientific structures or labels; if the source is insufficient, state what visual detail is missing.
-- Do not invent details about the learner's own course or teacher.
-
-Return JSON:
-{"title": string, "description": string, "estimated_duration": string,
- "modules": [{"module_number": number, "title": string, "estimated_time": string,
-  "lessons": [{"lesson_number": number, "title": string, "learning_objectives": [string], "content": "markdown", "key_concepts": [string],
-   "worked_example": {"problem": string, "solution_steps": [string], "answer": string},
-   "common_mistakes": [string],
-   "definitions": [{"term": string, "meaning": string}],
-   "formulas": [{"name": string, "latex": string, "explanation": string, "variables": [{"symbol": string, "meaning": string}]}],
-   "exercises": [{"prompt": string, "hint": string, "solution_steps": [string], "answer": string}],
-   "practice_questions": [{"question": string, "concept": string, "options": ["A) ...","B) ...","C) ...","D) ..."], "correct_answer": "A", "explanation": string}]}]}]}`;
-
-      const data = await callAIJSON<any>({ task: 'course_builder', prompt, region, persona, userGroqKey, projectId, validationType: 'course' });
-
+  const generate = async () => {
+    if (busyRef.current) return;
+    setShowRebuild(false); setGenerating(true); setGenError('');
+    try {
+      const sources = await loadSources();
+      if (!sources.length) { setGenError('Add at least one document or note in Materials first. Akili builds the course from what you add.'); return; }
+      const clean = { ...opts, goals: cleanGoals(opts.goals) };
+      const size = sizeFor(clean.depth, totalChars(sources), !!clean.goals);
+      const outline = await ai('course_outline', outlinePrompt(scope(), clean, outlineContext(sources), size));
+      const modules = pendingModules(outline, clean);
       const { data: saved, error } = await supabase.from('courses').insert({
-        project_id: projectId, user_id: userId,
-        title: data.title, description: data.description,
-        subject: project?.subject ?? null, exam_type: project?.exam_type ?? null,
-        modules: data.modules,
+        project_id: projectId, user_id: userId, title: outline.title, description: outline.description,
+        subject: project?.subject ?? null, exam_type: project?.exam_type ?? null, modules,
       }).select().single();
-      if (error || !saved) throw new Error('The course was written but could not be saved. Please try again.');
-
-      setCourse(saved);
-      setProgress({ completed_lessons: [] });
-      setOpenModule(data.modules[0]?.id ?? null);
-      setActiveId(null);
-      toast.success('Your course is ready');
+      if (error || !saved) throw new Error('The outline was written but could not be saved. Please try again.');
+      courseRef.current = saved; setCourse(saved); setProgress({ completed_lessons: [] }); setOpenModule(saved.modules[0]?.id ?? null); setActiveId(null);
+      setGenerating(false);
+      toast.success('Outline ready. Writing your lessons now.');
+      await buildFrom(0);
     } catch (err) {
       setGenError(errorMessage(err, 'Course generation failed. Please try again.'));
     } finally {
       setGenerating(false);
     }
+  };
+
+  const addModule = async () => {
+    const current = courseRef.current; if (!current || busyRef.current) return;
+    setGenError(''); busyRef.current = true; setBuildingIdx(-1);
+    try {
+      const sources = await loadSources();
+      const o: BuildOptions = { depth: opts.depth, goals: cleanGoals(addTopic), beyondNotes: addBeyond };
+      const existing = current.modules.map((m: any) => m.title);
+      const context = o.goals ? selectContext(sources, o.goals, 12_000) : outlineContext(sources);
+      const outline = await ai('course_outline', outlinePrompt(scope(), o, context, { modules: 1, lessonsPer: DEPTHS[opts.depth].lessonsPer }, existing));
+      const fresh = pendingModules(outline, o, current.modules.length).slice(0, 1);
+      const modules = [...current.modules, ...fresh];
+      const { error } = await supabase.from('courses').update({ modules }).eq('id', current.id).eq('user_id', userId);
+      if (error) throw new Error('Could not save the new module. Please try again.');
+      courseRef.current = { ...current, modules }; setCourse(courseRef.current); setOpenModule(fresh[0].id); setAddTopic('');
+    } catch (err) { setGenError(errorMessage(err, 'Could not add a module. Please try again.')); busyRef.current = false; setBuildingIdx(null); return; }
+    busyRef.current = false; setBuildingIdx(null);
+    await buildFrom(Math.max(0, (courseRef.current?.modules?.length || 1) - 1));
   };
 
   // Visuals are cached inside the lesson JSON (no schema change). A failed save only means we plan the diagram again next time.
@@ -210,17 +227,11 @@ Return JSON:
   if (!course) {
     return (
       <div className="space-y-4 p-4">
-        <EmptyState
-          icon={<GraduationCap size={22} />}
-          title="Build your course"
-          action={<Button onClick={generate}><Sparkles size={17} /> Build course</Button>}
-        >
-          Akili reads the notes and documents in Materials and turns them into lessons, worked examples and practice questions.
+        <EmptyState icon={<GraduationCap size={22} />} title="Build your course">
+          Akili reads the notes and documents in Materials and turns them into lessons, worked examples and practice questions. It writes an outline first, then each module.
         </EmptyState>
-        {genError && (
-          <ErrorState title="No course yet" message={genError} onRetry={genError.includes('Materials') ? undefined : generate}
-          />
-        )}
+        <Surface className="p-4"><CourseBuildForm value={opts} onChange={setOpts} onSubmit={generate} submitLabel="Build course" /></Surface>
+        {genError && <ErrorState title="No course yet" message={genError} onRetry={genError.includes('Materials') ? undefined : generate} />}
         {genError.includes('Materials') && onGoToMaterials && <Button variant="quiet" block onClick={onGoToMaterials}>Go to Materials</Button>}
       </div>
     );
@@ -251,7 +262,17 @@ Return JSON:
           )}
         </div>
 
+        {active.origin === 'beyond_notes' && <p className="rounded-xl bg-marker-wash p-3 text-sm font-semibold">Beyond your notes: this lesson adds standard material your notes do not cover. Check it against your textbook or teacher.</p>}
+        {active.origin === 'web' && <p className="rounded-xl bg-marker-wash p-3 text-sm font-semibold">From the web: sources are listed at the end of this lesson.</p>}
+
         <Prose>{active.content}</Prose>
+
+        {Array.isArray(active.sources) && active.sources.length > 0 && (
+          <Surface className="p-4">
+            <p className="mb-2 text-xs font-bold uppercase tracking-wide text-muted">Sources</p>
+            <ul className="space-y-1.5 text-sm">{active.sources.map((src: any, i: number) => <li key={i}><a href={src.url} target="_blank" rel="noopener noreferrer" className="font-semibold text-biro underline">{src.title}</a></li>)}</ul>
+          </Surface>
+        )}
 
         <LessonVisual
           lesson={active} projectId={projectId} userId={userId} region={region} persona={persona} userGroqKey={userGroqKey}
@@ -358,6 +379,24 @@ Return JSON:
         {(course.modules || []).map((mod: any) => {
           const open = openModule === mod.id;
           const finished = (mod.lessons || []).filter((l: any) => done.includes(l.id)).length;
+          if (isPending(mod)) {
+            const idx = (course.modules || []).indexOf(mod); const writing = buildingIdx === idx;
+            return (
+              <li key={mod.id}>
+                <Surface className="p-4">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-chalk text-sm font-extrabold">{mod.module_number}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-bold leading-snug">{mod.title}</span>
+                      <span className="block text-xs text-muted">{writing ? 'Writing this module now' : 'Not written yet'}</span>
+                    </span>
+                    {writing ? <RefreshCw size={18} className="shrink-0 animate-spin text-muted" aria-label="Writing" /> : <Button size="sm" variant="quiet" disabled={buildingIdx !== null} onClick={() => buildFrom(idx)}>Write</Button>}
+                  </div>
+                  {(mod.outline || []).length > 0 && <ul className="mt-3 space-y-1 border-t border-rule pt-3 text-sm text-muted">{mod.outline.map((l: any, i: number) => <li key={i}>{i + 1}. {l.title}</li>)}</ul>}
+                </Surface>
+              </li>
+            );
+          }
           return (
             <li key={mod.id}>
               <Surface className="overflow-hidden">
@@ -388,16 +427,22 @@ Return JSON:
         })}
       </ul>
 
-      <Button variant="ghost" block onClick={() => setConfirmRegen(true)}><RefreshCw size={16} /> Rebuild course from my materials</Button>
+      {buildingIdx === null && (course.modules || []).length < 12 && (
+        <Surface className="space-y-3 p-4">
+          <p className="flex items-center gap-2 font-bold"><Plus size={17} /> Add more to this course</p>
+          <TextInput aria-label="Topic to add" value={addTopic} maxLength={400} onChange={e => setAddTopic(e.target.value)} placeholder="A topic to add (optional)" />
+          <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="h-5 w-5 accent-ink" checked={addBeyond} onChange={e => setAddBeyond(e.target.checked)} /> It may go beyond my notes (marked clearly)</label>
+          <Button variant="quiet" block onClick={addModule}>Add a module</Button>
+        </Surface>
+      )}
 
-      <ConfirmDialog
-        open={confirmRegen}
-        title="Rebuild this course?"
-        body="Akili writes a new course from your current materials. Your lesson progress in the old course will not carry over."
-        confirmLabel="Rebuild course"
-        onConfirm={generate}
-        onCancel={() => setConfirmRegen(false)}
-      />
+      {buildingIdx === null && (showRebuild ? (
+        <Surface className="space-y-3 p-4">
+          <p className="text-sm font-semibold">Rebuilding writes a new course from your current materials. Lesson progress in the old course will not carry over.</p>
+          <CourseBuildForm value={opts} onChange={setOpts} onSubmit={generate} submitLabel="Rebuild course" />
+          <Button variant="ghost" block onClick={() => setShowRebuild(false)}>Cancel</Button>
+        </Surface>
+      ) : <Button variant="ghost" block onClick={() => setShowRebuild(true)}><RefreshCw size={16} /> Rebuild course from my materials</Button>)}
     </div>
   );
 }
