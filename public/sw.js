@@ -56,4 +56,39 @@ self.addEventListener('fetch', event => {
   );
 });
 
-if (typeof module !== 'undefined') module.exports = { classify, STATIC_CACHE, OFFLINE_URL };
+// ── Push reminders ───────────────────────────────────────────────────────────
+// A notification may only open a page on this site.
+function safeUrl(raw) {
+  return typeof raw === 'string' && raw.startsWith('/') && !raw.startsWith('//') && !raw.includes('\\') ? raw : '/projects';
+}
+
+self.addEventListener('push', event => {
+  let data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = { body: event.data ? event.data.text() : '' }; }
+  const options = {
+    body: String(data.body || '').slice(0, 200),
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-192.png',
+    tag: typeof data.tag === 'string' ? data.tag.slice(0, 40) : 'akili',
+    data: { url: safeUrl(data.url) },
+  };
+  // Browsers require every push to show a notification.
+  event.waitUntil(self.registration.showNotification(String(data.title || 'Akili').slice(0, 80), options));
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const url = safeUrl(event.notification.data && event.notification.data.url);
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(list => {
+      for (const c of list) {
+        if (new URL(c.url).origin === self.location.origin && 'focus' in c) {
+          return (c.navigate ? c.navigate(url) : Promise.resolve()).then(() => c.focus());
+        }
+      }
+      return clients.openWindow(url);
+    }),
+  );
+});
+
+if (typeof module !== 'undefined') module.exports = { classify, safeUrl, STATIC_CACHE, OFFLINE_URL };

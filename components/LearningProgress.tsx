@@ -4,13 +4,14 @@ import { supabase } from '@/lib/supabase';
 import { Brain, CheckCircle2, RefreshCw, Target } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { loadDiagramEvidence, type DiagramEvidenceSummary } from '@/lib/visual/adaptive';
+import RecommendationsCard from '@/components/RecommendationsCard';
 import { Button, EmptyState, ErrorState, Field, ProgressBar, Skeleton, Surface, TextInput } from '@/components/ui';
 
-interface Props { projectId: string; userId: string }
+interface Props { projectId: string; userId: string; onGoTo?: (tab: string) => void }
 
 const splitList = (v: string) => v.split(',').map(x => x.trim()).filter(Boolean);
 
-export default function LearningProgress({ projectId, userId }: Props) {
+export default function LearningProgress({ projectId, userId, onGoTo }: Props) {
   const [concepts, setConcepts] = useState<any[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [context, setContext] = useState({ foods: '', transport: '', objects: '' });
@@ -52,6 +53,7 @@ export default function LearningProgress({ projectId, userId }: Props) {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4 p-4">
+      <RecommendationsCard projectId={projectId} userId={userId} concepts={concepts} onGoTo={onGoTo} />
       <Surface className="bg-ink p-5 text-white">
         <div className="flex items-start justify-between gap-3">
           <div>

@@ -4,7 +4,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import {
-  ArrowLeft, BarChart3, BookOpen, Brain, Camera, Lightbulb, FileText, GraduationCap, HelpCircle, MessageSquare,
+  ArrowLeft, BarChart3, BookOpen, Brain, CalendarDays, Camera, Lightbulb, FileText, GraduationCap, HelpCircle, MessageSquare,
   MoreHorizontal, ShieldAlert, Sparkles, X, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -21,11 +21,12 @@ import AskAI from '@/components/AskAI';
 import TopicAnalysis from '@/components/TopicAnalysis';
 import Materials from '@/components/Materials';
 import LearningProgress from '@/components/LearningProgress';
+import PlanView from '@/components/PlanView';
 import ResearchLab from '@/components/ResearchLab';
 import QuickNoteModal from '@/components/QuickNoteModal';
 import ProjectSidebar from '@/components/ProjectSidebar';
 
-type Tab = 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'study' | 'help' | 'snap' | 'ask' | 'analysis' | 'progress' | 'research';
+type Tab = 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'study' | 'help' | 'snap' | 'ask' | 'analysis' | 'progress' | 'research' | 'plan';
 
 interface TabDef { id: Tab; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; desc: string }
 
@@ -38,6 +39,7 @@ const TABS: TabDef[] = [
   { id: 'flashcards', label: 'Flashcards', icon: Sparkles, desc: 'Memory aids' },
   { id: 'snap', label: 'Snap & Solve', icon: Camera, desc: 'Photograph a question' },
   { id: 'help', label: 'Get unstuck', icon: Lightbulb, desc: 'Simple explanations and quick methods' },
+  { id: 'plan', label: 'Plan', icon: CalendarDays, desc: 'Study timetable until your exam' },
   { id: 'study', label: 'Study', icon: BookOpen, desc: 'Guides, slides, mind maps' },
   { id: 'analysis', label: 'Topic analysis', icon: BarChart3, desc: 'What comes up most' },
   { id: 'progress', label: 'Progress', icon: Brain, desc: 'Strong and weak concepts' },
@@ -78,7 +80,10 @@ export default function ProjectPage() {
 
       // Land on the course when there is one already (PastQ imports, or a course built earlier).
       const { data: course } = await supabase.from('courses').select('id').eq('project_id', projectId).limit(1).maybeSingle();
-      if (course) setTab('course');
+      // A link such as ?tab=flashcards (reminders, the import page) wins over the default landing tab.
+      const wanted = new URLSearchParams(window.location.search).get('tab');
+      if (wanted && TABS.some(t => t.id === wanted)) setTab(wanted as Tab);
+      else if (course) setTab('course');
       setStatus('ready');
     } catch {
       setStatus('error');
@@ -164,7 +169,8 @@ export default function ProjectPage() {
         {tab === 'materials' && <Materials projectId={projectId} userId={user.id} />}
         {tab === 'course' && <CourseView projectId={projectId} userId={user.id} region={region} persona={persona} userGroqKey={userGroqKey} onGoToMaterials={() => setTab('materials')} />}
         {tab === 'analysis' && <TopicAnalysis projectId={projectId} examType={project.exam_board || project.exam_type || undefined} isSecondary={levelOf(project) === 'secondary'} />}
-        {tab === 'progress' && <LearningProgress projectId={projectId} userId={user.id} />}
+        {tab === 'plan' && <PlanView projectId={projectId} userId={user.id} onGoTo={t => setTab(t as Tab)} />}
+        {tab === 'progress' && <LearningProgress projectId={projectId} userId={user.id} onGoTo={t => setTab(t as Tab)} />}
         {tab === 'quiz' && <QuizMode projectId={projectId} userId={user.id} region={region} persona={persona} onGoToMaterials={() => setTab('materials')} />}
         {tab === 'exam' && <ExamMode projectId={projectId} userId={user.id} region={region} persona={persona} onGoToMaterials={() => setTab('materials')} />}
         {tab === 'snap' && <SnapSolve projectId={projectId} region={region} />}

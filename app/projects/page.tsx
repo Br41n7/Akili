@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
-import { BookOpen, ChevronRight, LogOut, Plus, Trash2, Upload } from 'lucide-react';
+import { BookOpen, ChevronRight, LogOut, Plus, Settings, Trash2, Upload } from 'lucide-react';
 import toast from 'react-hot-toast';
 import NewProjectSheet from '@/components/NewProjectSheet';
 import { Button, Chip, ConfirmDialog, EmptyState, ErrorState, IconButton, ListSkeleton, Surface, Wordmark } from '@/components/ui';
@@ -54,6 +54,7 @@ export default function ProjectsPage() {
           <Wordmark />
           <div className="flex items-center gap-1">
             <Button className="hidden sm:inline-flex" size="sm" onClick={() => setShowNew(true)}><Plus size={16} /> New project</Button>
+            <Link href="/settings" aria-label="Settings" className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-ink/5 active:bg-ink/10"><Settings size={19} /></Link>
             <IconButton label="Sign out" onClick={signOut}><LogOut size={19} /></IconButton>
           </div>
         </div>

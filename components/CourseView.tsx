@@ -1,4 +1,5 @@
 'use client';
+import { addLesson, saveCompletedLessons } from '@/lib/course-progress';
 import LessonExtras from '@/components/LessonExtras';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
@@ -54,8 +55,10 @@ export default function CourseView({ projectId, userId, region, persona, userGro
       if (courseData) {
         setCourse(courseData);
         setOpenModule(courseData.modules?.[0]?.id ?? null);
-        const { data: prog } = await supabase.from('course_progress').select('*').eq('course_id', courseData.id).eq('user_id', userId).maybeSingle();
-        if (prog) setProgress({ completed_lessons: prog.completed_lessons || [] });
+        // A progress problem must never hide the course itself.
+        const { data: prog, error: progErr } = await supabase.from('course_progress').select('*').eq('course_id', courseData.id).eq('user_id', userId).maybeSingle();
+        if (progErr) toast.error('Could not load your saved progress. Your lessons are still here.');
+        else if (prog) setProgress({ completed_lessons: prog.completed_lessons || [] });
       }
       setStatus('ready');
     } catch {
@@ -161,12 +164,20 @@ Return JSON:
 
   const openLesson = (id: string) => { setActiveId(id); setAnswers({}); setChecked(false); window.scrollTo({ top: 0 }); };
 
-  const markComplete = async (lessonId: string) => {
-    if (done.includes(lessonId)) return;
-    const updated = [...done, lessonId];
+  // Lessons are saved one after another from the latest list, so two quick taps can never overwrite each other.
+  const doneRef = useRef<string[]>([]);
+  doneRef.current = progress.completed_lessons;
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const markComplete = (lessonId: string) => {
+    if (doneRef.current.includes(lessonId)) return;
+    const before = doneRef.current;
+    const updated = addLesson(before, lessonId);
+    doneRef.current = updated;
     setProgress({ completed_lessons: updated });
-    const { error } = await supabase.from('course_progress').upsert({ course_id: course.id, user_id: userId, completed_lessons: updated });
-    if (error) { setProgress({ completed_lessons: done }); toast.error('Could not save your progress. Try again.'); }
+    saveQueue.current = saveQueue.current.then(async () => {
+      const ok = await saveCompletedLessons(supabase, course.id, userId, updated);
+      if (!ok) { doneRef.current = before; setProgress({ completed_lessons: before }); toast.error('Could not save your progress. Check your connection and try again.'); }
+    });
   };
 
   const checkAnswers = async (lesson: any) => {

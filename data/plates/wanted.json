@@ -1,0 +1,12 @@
+{
+  "note": "Topics we want plates for. Run `node scripts/plates.mjs search \"<term>\"`, pick a file you like, then add its Commons title to plates.json under `picks`. Nothing here is a verified file name.",
+  "wanted": [
+    { "id": "back-muscles-superficial", "discipline": "anatomy", "topic": "Superficial back muscles", "search": "Gray's Anatomy back muscles superficial" },
+    { "id": "rotator-cuff-posterior", "discipline": "anatomy", "topic": "Rotator cuff, posterior view", "search": "rotator cuff muscles posterior view scapula" },
+    { "id": "shoulder-joint", "discipline": "anatomy", "topic": "Shoulder joint", "search": "Gray's Anatomy shoulder joint" },
+    { "id": "lower-limb-muscles-anterior", "discipline": "anatomy", "topic": "Anterior thigh muscles", "search": "Gray's Anatomy muscles anterior thigh" },
+    { "id": "neuron-action-potential", "discipline": "physiology", "topic": "Neuron structure", "search": "neuron structure diagram" },
+    { "id": "nephron", "discipline": "physiology", "topic": "Nephron", "search": "nephron diagram" }
+  ],
+  "biochemistry": "Pathways such as glycolysis and the Krebs cycle are drawn by our own engine, not downloaded."
+}
