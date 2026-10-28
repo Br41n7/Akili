@@ -100,19 +100,22 @@ export class AIServiceError extends Error {
   readonly status: number;
   readonly userMessage: string;
   readonly detail: string;
-  constructor(code: AIErrorCode, detail = '') {
+  /** Which providers failed and how ("groq: rate_limit"). Category names only, so safe to show; never provider messages. */
+  readonly reasons: string[];
+  constructor(code: AIErrorCode, detail = '', reasons: string[] = []) {
     super(PUBLIC_MESSAGES[code]);
     this.name = 'AIServiceError';
     this.code = code;
     this.status = PUBLIC_STATUS[code];
     this.userMessage = PUBLIC_MESSAGES[code];
     this.detail = detail;
+    this.reasons = reasons;
   }
 }
 
 /** Convert anything thrown into something safe to send to the browser. */
-export function toPublicError(err: unknown): { message: string; code: AIErrorCode | 'INTERNAL'; status: number } {
-  if (err instanceof AIServiceError) return { message: err.userMessage, code: err.code, status: err.status };
+export function toPublicError(err: unknown): { message: string; code: AIErrorCode | 'INTERNAL'; status: number; reasons?: string[] } {
+  if (err instanceof AIServiceError) return { message: err.userMessage, code: err.code, status: err.status, ...(err.reasons.length ? { reasons: err.reasons } : {}) };
   return { message: 'Something went wrong on our side. Please try again.', code: 'INTERNAL', status: 500 };
 }
 
@@ -542,11 +545,12 @@ export async function runAIDetailed(opts: AIOptions): Promise<AIResult> {
   const detail = failures.map(x => `${x.c.provider}/${x.c.model}: ${x.f.kind}`).join('; ');
   logCall({ task: opts.task, ok: false, ms: Date.now() - started, fallbacks: failures.length, failures: kinds });
 
+  const reasons = [...new Set(failures.map(x => `${x.c.provider}: ${x.f.kind}${x.f.status ? ` ${x.f.status}` : ''}`))].slice(0, 6);
   if (!failures.length) throw new AIServiceError('AI_TIMEOUT', 'budget exhausted');
-  if (kinds.every(k => k === 'auth' || k === 'model_missing')) throw new AIServiceError('AI_NOT_CONFIGURED', detail);
-  if (kinds.every(k => k === 'rate_limit')) throw new AIServiceError('AI_RATE_LIMITED', detail);
-  if (kinds.includes('timeout') && !kinds.includes('server')) throw new AIServiceError('AI_TIMEOUT', detail);
-  throw new AIServiceError('AI_UNAVAILABLE', detail);
+  if (kinds.every(k => k === 'auth' || k === 'model_missing')) throw new AIServiceError('AI_NOT_CONFIGURED', detail, reasons);
+  if (kinds.every(k => k === 'rate_limit')) throw new AIServiceError('AI_RATE_LIMITED', detail, reasons);
+  if (kinds.includes('timeout') && !kinds.includes('server')) throw new AIServiceError('AI_TIMEOUT', detail, reasons);
+  throw new AIServiceError('AI_UNAVAILABLE', detail, reasons);
 }
 
 /** Text in, text out. */

@@ -8,8 +8,8 @@
  * The variables are NEXT_PUBLIC_ so the browser and the server always agree. Neither holds a secret.
  * A flag only says a feature is allowed; the provider keys it needs are still separate server secrets.
  */
-export type Feature = 'hourly_reminders' | 'cloud_tts' | 'image_generation' | 'video_export';
-export const FEATURES: Feature[] = ['hourly_reminders', 'cloud_tts', 'image_generation', 'video_export'];
+export type Feature = 'hourly_reminders' | 'cloud_tts' | 'image_generation' | 'video_export' | 'search_grounding';
+export const FEATURES: Feature[] = ['hourly_reminders', 'cloud_tts', 'image_generation', 'video_export', 'search_grounding'];
 
 export interface Capabilities { plan: 'free' | 'pro'; has: (f: Feature) => boolean; limits: Limits }
 export interface Limits { dailyImageGenerations: number; dailyVisualPlans: number }

@@ -6,7 +6,9 @@
  * is restricted to that key only (`userKeyOnly`), so the shared keys are never touched.
  */
 
-export const FREE_DAILY_LIMIT = 20;
+/** 20 a day unless AI_FREE_DAILY_LIMIT says otherwise (server-side env; raise it for paid plans). */
+const fromEnv = Math.floor(Number(process.env.AI_FREE_DAILY_LIMIT));
+export const FREE_DAILY_LIMIT = Number.isFinite(fromEnv) && fromEnv > 0 ? Math.min(fromEnv, 1000) : 20;
 
 export interface QuotaPlan {
   allow: boolean;

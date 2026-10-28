@@ -1,9 +1,10 @@
 'use client';
 import { addLesson, saveCompletedLessons } from '@/lib/course-progress';
+import { capabilities } from '@/lib/plan';
 import CourseBuildForm from '@/components/CourseBuildForm';
 import {
   DEFAULT_OPTIONS, DEPTHS, cleanGoals, fillModule, isPending, modulePrompt, nextPendingIndex, outlineContext, outlineOf, outlinePrompt, pendingModules,
-  selectContext, sizeFor, totalChars, type BuildOptions, type LearnerScope, type Source,
+  attachSources, balancedChunks, groundingRequest, retryTransient, selectContext, sizeFor, totalChars, type BuildOptions, type LearnerScope, type Research, type Source,
 } from '@/lib/course-builder';
 import LessonExtras from '@/components/LessonExtras';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -44,6 +45,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
   const [addTopic, setAddTopic] = useState('');
   const [addBeyond, setAddBeyond] = useState(false);
   const busyRef = useRef(false);
+  const webOn = capabilities().has('search_grounding');
   const [openModule, setOpenModule] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -96,18 +98,34 @@ export default function CourseView({ projectId, userId, region, persona, userGro
     topic: project ? studySubjectText(project) : 'the learner’s topic', secondary: project ? levelOf(project) === 'secondary' : false,
     classLevel: String(project?.class_level || project?.study_year || ''), region,
   });
-  const ai = (task: 'course_outline' | 'course_module', prompt: string) => callAIJSON<any>({ task, prompt, region, persona, userGroqKey, projectId, validationType: task });
+  // A busy AI service is retried twice after short waits before the learner is told.
+  const ai = (task: 'course_outline' | 'course_module', prompt: string) => retryTransient(() => callAIJSON<any>({ task, prompt, region, persona, userGroqKey, projectId, validationType: task }));
 
   /** Write one pending module and save it. Everything already saved stays saved if this one fails. */
   const buildModule = async (index: number) => {
     const current = courseRef.current; const m = current?.modules?.[index];
     if (!current || !m || !isPending(m)) return;
-    const bopts: BuildOptions = { depth: opts.depth, goals: m.build_opts?.goals || '', beyondNotes: !!m.build_opts?.beyondNotes };
+    const bopts: BuildOptions = { depth: opts.depth, goals: m.build_opts?.goals || '', beyondNotes: !!m.build_opts?.beyondNotes, web: !!m.build_opts?.web };
     const sources = await loadSources();
     const query = `${m.title} ${(m.outline || []).map((l: any) => `${l.title} ${l.objective}`).join(' ')}`;
-    const data = await ai('course_module', modulePrompt(scope(), bopts, current.modules.map((x: any) => x.title), outlineOf(m), m.module_number, selectContext(sources, query)));
+    // Web research is optional: if it is off, fails or finds nothing, the module is written without it.
+    let research: Research | null = null;
+    if (bopts.beyondNotes && bopts.web) {
+      try {
+        const r = await fetch('/api/ai/ground', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(groundingRequest(scope(), outlineOf(m))) });
+        if (r.ok) { const j = await r.json(); if (typeof j?.notes === 'string' && Array.isArray(j?.sources)) research = { notes: j.notes, sources: j.sources }; }
+      } catch { /* continue without web research */ }
+    }
+    // Lessons are requested a few at a time: smaller answers are faster, less likely to be cut off, and kinder to free-tier limits.
+    const outline = outlineOf(m); const titles = current.modules.map((x: any) => x.title); const context = selectContext(sources, query);
+    const parts = outline.lessons.length ? balancedChunks(outline.lessons.length, 3) : [null];
+    const written: any[] = [];
+    for (const part of parts) {
+      const data = await ai('course_module', modulePrompt(scope(), bopts, titles, outline, m.module_number, context, research, part ? { lessons: outline.lessons.slice(part.start, part.start + part.count), startNumber: part.start + 1 } : undefined));
+      written.push(...data.lessons);
+    }
     const latest = courseRef.current; // lesson visuals may have been saved meanwhile
-    const modules = fillModule(latest.modules, index, data.lessons);
+    const modules = fillModule(latest.modules, index, attachSources(written, research));
     const { error } = await supabase.from('courses').update({ modules }).eq('id', latest.id).eq('user_id', userId);
     if (error) throw new Error('The module was written but could not be saved. Please try again.');
     courseRef.current = { ...latest, modules }; setCourse(courseRef.current);
@@ -120,7 +138,11 @@ export default function CourseView({ projectId, userId, region, persona, userGro
       for (let i = nextPendingIndex(courseRef.current?.modules || [], start); i >= 0; i = nextPendingIndex(courseRef.current?.modules || [], i + 1)) {
         setBuildingIdx(i);
         try { await buildModule(i); }
-        catch (err) { setGenError(`Module ${i + 1} could not be written. ${errorMessage(err, 'Please try again.')} Your other modules are saved.`); break; }
+        catch (err) {
+          const why = (err as { reasons?: string[] })?.reasons?.length ? ` (${(err as { reasons: string[] }).reasons.join('; ')})` : '';
+          setGenError(`Module ${i + 1} could not be written. ${errorMessage(err, 'Please try again.')}${why} Your other modules are saved.`); break;
+        }
+        if (nextPendingIndex(courseRef.current?.modules || [], i + 1) >= 0) await new Promise(r => setTimeout(r, 1_500)); // a short pause between modules keeps free-tier limits happy
       }
     } finally { busyRef.current = false; setBuildingIdx(null); }
   };
@@ -131,7 +153,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
     try {
       const sources = await loadSources();
       if (!sources.length) { setGenError('Add at least one document or note in Materials first. Akili builds the course from what you add.'); return; }
-      const clean = { ...opts, goals: cleanGoals(opts.goals) };
+      const clean = { ...opts, goals: cleanGoals(opts.goals), web: webOn };
       const size = sizeFor(clean.depth, totalChars(sources), !!clean.goals);
       const outline = await ai('course_outline', outlinePrompt(scope(), clean, outlineContext(sources), size));
       const modules = pendingModules(outline, clean);
@@ -156,7 +178,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
     setGenError(''); busyRef.current = true; setBuildingIdx(-1);
     try {
       const sources = await loadSources();
-      const o: BuildOptions = { depth: opts.depth, goals: cleanGoals(addTopic), beyondNotes: addBeyond };
+      const o: BuildOptions = { depth: opts.depth, goals: cleanGoals(addTopic), beyondNotes: addBeyond, web: webOn };
       const existing = current.modules.map((m: any) => m.title);
       const context = o.goals ? selectContext(sources, o.goals, 12_000) : outlineContext(sources);
       const outline = await ai('course_outline', outlinePrompt(scope(), o, context, { modules: 1, lessonsPer: DEPTHS[opts.depth].lessonsPer }, existing));
@@ -230,7 +252,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
         <EmptyState icon={<GraduationCap size={22} />} title="Build your course">
           Akili reads the notes and documents in Materials and turns them into lessons, worked examples and practice questions. It writes an outline first, then each module.
         </EmptyState>
-        <Surface className="p-4"><CourseBuildForm value={opts} onChange={setOpts} onSubmit={generate} submitLabel="Build course" /></Surface>
+        <Surface className="p-4"><CourseBuildForm webAvailable={webOn} value={opts} onChange={setOpts} onSubmit={generate} submitLabel="Build course" /></Surface>
         {genError && <ErrorState title="No course yet" message={genError} onRetry={genError.includes('Materials') ? undefined : generate} />}
         {genError.includes('Materials') && onGoToMaterials && <Button variant="quiet" block onClick={onGoToMaterials}>Go to Materials</Button>}
       </div>
@@ -431,7 +453,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
         <Surface className="space-y-3 p-4">
           <p className="flex items-center gap-2 font-bold"><Plus size={17} /> Add more to this course</p>
           <TextInput aria-label="Topic to add" value={addTopic} maxLength={400} onChange={e => setAddTopic(e.target.value)} placeholder="A topic to add (optional)" />
-          <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="h-5 w-5 accent-ink" checked={addBeyond} onChange={e => setAddBeyond(e.target.checked)} /> It may go beyond my notes (marked clearly)</label>
+          <label className="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" className="h-5 w-5 accent-ink" checked={addBeyond} onChange={e => setAddBeyond(e.target.checked)} /> It may go beyond my notes{webOn ? ' (checked against the web, with sources)' : ' (marked clearly)'}</label>
           <Button variant="quiet" block onClick={addModule}>Add a module</Button>
         </Surface>
       )}
@@ -439,7 +461,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
       {buildingIdx === null && (showRebuild ? (
         <Surface className="space-y-3 p-4">
           <p className="text-sm font-semibold">Rebuilding writes a new course from your current materials. Lesson progress in the old course will not carry over.</p>
-          <CourseBuildForm value={opts} onChange={setOpts} onSubmit={generate} submitLabel="Rebuild course" />
+          <CourseBuildForm webAvailable={webOn} value={opts} onChange={setOpts} onSubmit={generate} submitLabel="Rebuild course" />
           <Button variant="ghost" block onClick={() => setShowRebuild(false)}>Cancel</Button>
         </Surface>
       ) : <Button variant="ghost" block onClick={() => setShowRebuild(true)}><RefreshCw size={16} /> Rebuild course from my materials</Button>)}

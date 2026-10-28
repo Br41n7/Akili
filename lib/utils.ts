@@ -7,7 +7,7 @@ export function cn(...inputs: ClassValue[]) {
 
 /** Thrown by callAI. `message` is always safe to show to the learner. */
 export class AIRequestError extends Error {
-  constructor(message: string, readonly code: string = 'UNKNOWN') {
+  constructor(message: string, readonly code: string = 'UNKNOWN', readonly reasons: string[] = []) {
     super(message);
     this.name = 'AIRequestError';
   }
@@ -32,7 +32,7 @@ export async function callAI(body: object): Promise<string> {
     });
     const data = await res.json().catch(() => null);
     if (!res.ok || !data || data.error || typeof data.result !== 'string') {
-      throw new AIRequestError(data?.error || 'Something went wrong. Please try again.', data?.code || 'HTTP_' + res.status);
+      throw new AIRequestError(data?.error || 'Something went wrong. Please try again.', data?.code || 'HTTP_' + res.status, Array.isArray(data?.reasons) ? data.reasons.filter((r: unknown) => typeof r === 'string').slice(0, 6) : []);
     }
     if (data.keyRejected && !keyWarningShown && typeof window !== 'undefined') {
       keyWarningShown = true;

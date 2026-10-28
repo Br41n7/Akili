@@ -44,8 +44,8 @@ const bodySchema = z.object({
   projectId: z.string().uuid().optional(),
 });
 
-const fail = (message: string, status: number, code?: string) =>
-  NextResponse.json({ error: message, ...(code ? { code } : {}) }, { status });
+const fail = (message: string, status: number, code?: string, reasons?: string[]) =>
+  NextResponse.json({ error: message, ...(code ? { code } : {}), ...(reasons?.length ? { reasons } : {}) }, { status });
 
 export async function POST(req: NextRequest) {
   try {
@@ -142,6 +142,6 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     if (!(err instanceof AIServiceError)) console.error('[AI Generate] unexpected error:', err);
     const pub = toPublicError(err);
-    return fail(pub.message, pub.status, pub.code);
+    return fail(pub.message, pub.status, pub.code, pub.reasons);
   }
 }
