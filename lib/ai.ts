@@ -129,6 +129,8 @@ class ProviderFailure extends Error {
     readonly status: number | undefined,
     readonly detail: string,
     readonly retryAfterMs?: number,
+    /** The provider's own short error code (for example "json_validate_failed"), letters, digits and _.- only. */
+    readonly code?: string,
   ) {
     super(detail);
   }
@@ -275,8 +277,18 @@ function tripCooldown(c: Candidate, f: ProviderFailure) {
 const SECRET_PATTERN = /(AIza[0-9A-Za-z_-]{20,}|gsk_[0-9A-Za-z]{16,}|sk-[0-9A-Za-z_-]{16,}|Bearer\s+[0-9A-Za-z._-]{16,})/g;
 const redact = (s: string) => s.replace(SECRET_PATTERN, '[redacted]').slice(0, 400);
 
+/** Only a short machine code is pulled from an error body, never its message (which can echo the prompt or the model's output). */
+export function providerErrorCode(body: string): string | undefined {
+  try {
+    const j = JSON.parse(body); const e = j?.error ?? j;
+    for (const v of [e?.code, e?.type, e?.status]) if (typeof v === 'string' && /^[A-Za-z0-9_.-]{1,40}$/.test(v)) return v;
+  } catch { /* not JSON */ }
+  return undefined;
+}
+
 function classifyStatus(status: number, body: string): FailureKind {
-  if (status === 401 || status === 403) return 'auth';
+  // 402 is "payment required": the account is out of credit, so the provider cannot be used until it is topped up.
+  if (status === 401 || status === 402 || status === 403) return 'auth';
   if (status === 404) return 'model_missing';
   if (status === 408) return 'timeout';
   if (status === 429) return 'rate_limit';
@@ -309,13 +321,15 @@ async function postJSON(
       signal: controller.signal,
     });
     if (!res.ok) {
-      const text = redact(await res.text().catch(() => ''));
+      const rawText = await res.text().catch(() => '');
+      const text = redact(rawText);
       const retryAfter = Number(res.headers.get('retry-after'));
       throw new ProviderFailure(
         classifyStatus(res.status, text),
         res.status,
         `HTTP ${res.status} ${text}`,
         Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : undefined,
+        providerErrorCode(rawText),
       );
     }
     return await res.json();
@@ -348,7 +362,8 @@ async function callGemini(c: Candidate, o: AIOptions, timeoutMs: number): Promis
 
   // Gemini 3.x: no temperature/top_p/top_k. Reasoning effort is set with thinkingLevel.
   const generationConfig: Record<string, unknown> = {};
-  if (o.maxOutputTokens) generationConfig.maxOutputTokens = o.maxOutputTokens;
+  const cap = o.maxOutputTokens ?? getTask(o.task).maxOutputTokens;
+  if (cap) generationConfig.maxOutputTokens = cap;
   if (o.format === 'json') generationConfig.responseMimeType = 'application/json';
   const level = geminiThinkingLevel(getTask(o.task));
 
@@ -405,7 +420,7 @@ async function callChatCompletions(c: Candidate, o: AIOptions, timeoutMs: number
       ]
     : o.prompt;
 
-  const maxTokens = o.maxOutputTokens ?? envNumber('AI_MAX_OUTPUT_TOKENS', getTask(o.task).heavy ? 16000 : 8000);
+  const maxTokens = o.maxOutputTokens ?? getTask(o.task).maxOutputTokens ?? envNumber('AI_MAX_OUTPUT_TOKENS', getTask(o.task).heavy ? 16000 : 8000);
   const build = (withReasoning: boolean) => ({
     model: c.model,
     messages: [{ role: 'system', content: system }, { role: 'user', content: userContent }],
@@ -529,7 +544,7 @@ export async function runAIDetailed(opts: AIOptions): Promise<AIResult> {
         // A bad key fails for every model of that provider, so skip the rest of them.
         if (f.kind === 'auth') deadProviders.add(providerKey);
         // Only the failure category is logged here. The provider's error body stays out of logs.
-        console.warn(`[ai] ${c.provider}/${c.model}${c.userKey ? ' (user key)' : ''} failed: ${f.kind}${f.status ? ` ${f.status}` : ''}`);
+        console.warn(`[ai] ${c.provider}/${c.model}${c.userKey ? ' (user key)' : ''} failed: ${f.kind}${f.status ? ` ${f.status}` : ''}${f.code ? ` ${f.code}` : ''}`);
 
         const backoff = 400 * attempt;
         if (RETRY_SAME.includes(f.kind) && attempt < maxTries && deadline - Date.now() > MIN_ATTEMPT_MS + backoff) {
@@ -545,7 +560,7 @@ export async function runAIDetailed(opts: AIOptions): Promise<AIResult> {
   const detail = failures.map(x => `${x.c.provider}/${x.c.model}: ${x.f.kind}`).join('; ');
   logCall({ task: opts.task, ok: false, ms: Date.now() - started, fallbacks: failures.length, failures: kinds });
 
-  const reasons = [...new Set(failures.map(x => `${x.c.provider}: ${x.f.kind}${x.f.status ? ` ${x.f.status}` : ''}`))].slice(0, 6);
+  const reasons = [...new Set(failures.map(x => `${x.c.provider}: ${x.f.kind}${x.f.status ? ` ${x.f.status}` : ''}${x.f.code ? ` ${x.f.code}` : ''}`))].slice(0, 6);
   if (!failures.length) throw new AIServiceError('AI_TIMEOUT', 'budget exhausted');
   if (kinds.every(k => k === 'auth' || k === 'model_missing')) throw new AIServiceError('AI_NOT_CONFIGURED', detail, reasons);
   if (kinds.every(k => k === 'rate_limit')) throw new AIServiceError('AI_RATE_LIMITED', detail, reasons);

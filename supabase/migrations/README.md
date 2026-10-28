@@ -16,4 +16,4 @@ Back up the database first. Files `0002` onward are written to be re-runnable.
 | 0009_push_reminders.sql | Push subscriptions and reminder settings |
 | 0010_study_plans.sql | Study planner (one plan per learner per project) |
 
-
+`o.sql` was removed: every statement in it already exists in `0002_adaptive.sql`.

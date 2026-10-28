@@ -31,15 +31,17 @@ Not verified, so check before enabling in production:
 
 ## If a module will not write ("The AI tutor is busy right now")
 
-That message means every AI provider failed in a way other than a plain rate limit (a plain rate limit says "Many students are studying right now"). The error now ends with the categories that failed, for example `(groq: rate_limit 429; gemini: server 503)`. The same information is in the server logs: look for `[ai] groq/... failed: <kind> <status>` lines and the final `{"task":"course_module","ok":false,"failures":[...]}` line in Vercel's logs.
+That message means every AI provider failed in a way other than a plain rate limit (a plain rate limit says "Many students are studying right now"). The error now ends with the categories that failed (and the provider's own short error code, such as `json_validate_failed`, when it gives one), for example `(groq: rate_limit 429; gemini: server 503)`. The same information is in the server logs: look for `[ai] groq/... failed: <kind> <status>` lines and the final `{"task":"course_module","ok":false,"failures":[...]}` line in Vercel's logs.
 
 What the failure kinds usually mean:
 - `server 503` or `server 500`: the provider is overloaded. Wait and retry; the app now does this itself twice.
 - `rate_limit 429`: a per-minute or per-day free-tier limit. Wait, or add a paid key.
 - `bad_request 400/413`: the request itself was refused (too large for that model, or an unsupported setting). Send me the line.
-- `auth 401/403`, `model_missing 404`: a key or model name in the environment is wrong.
+- `auth 401/402/403`, `model_missing 404`: a key or model name in the environment is wrong, or the account is out of credit (402, for example DeepSeek with no balance). Top it up or remove that key from the environment.
 - `empty`, `truncated`: the model returned nothing, or ran out of room.
 
 What the app now does by itself: retries a busy service twice (after 4 s and 10 s), pauses 1.5 s between modules, and asks for at most 3 lessons per request so each answer is smaller.
 
 The free daily allowance is 20 AI requests. A staged course uses one request for the outline plus one or two per module, so a deep course can use most of a day. Raise it with the server variable `AI_FREE_DAILY_LIMIT` (for example 60); it is capped at 1000.
+
+Course outlines and modules now run at low reasoning effort with output caps (3,000 and 7,000 tokens). That keeps Gemini inside its time limit and keeps requests small for Groq's per-minute token limits.

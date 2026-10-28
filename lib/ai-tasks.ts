@@ -30,6 +30,8 @@ export interface TaskSpec {
   heavy?: boolean;
   /** Short, cheap task: ask reasoning models to think less. */
   lowEffort?: boolean;
+  /** Output cap for this task. Smaller caps are faster and count less against free-tier per-minute limits. */
+  maxOutputTokens?: number;
 }
 
 const GROQ_FIRST: ProviderId[] = ['groq', 'gemini', 'openai', 'deepseek'];
@@ -44,8 +46,9 @@ const LIGHT_MS = 30_000;
 const list: TaskSpec[] = [
   // Bulk structured generation: Groq first to spare Gemini quota.
   { id: 'course_builder', providers: GROQ_FIRST, input: 'text', validation: 'course', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
-  { id: 'course_outline', providers: GROQ_FIRST, input: 'text', validation: 'course_outline', timeoutMs: BASE_MS, retries: 1 },
-  { id: 'course_module', providers: GROQ_FIRST, input: 'text', validation: 'course_module', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
+  { id: 'course_outline', providers: GROQ_FIRST, input: 'text', validation: 'course_outline', timeoutMs: BASE_MS, retries: 1, lowEffort: true, maxOutputTokens: 3000 },
+  // Writing up to 3 lessons from supplied material needs little reasoning: low effort keeps it well inside the time limit.
+  { id: 'course_module', providers: GROQ_FIRST, input: 'text', validation: 'course_module', timeoutMs: HEAVY_MS, retries: 1, heavy: true, lowEffort: true, maxOutputTokens: 7000 },
   { id: 'study_guide', providers: GROQ_FIRST, input: 'text', validation: 'study_guide', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
   { id: 'infographic', providers: GROQ_FIRST, input: 'text', validation: 'infographic', timeoutMs: BASE_MS, retries: 1 },
   { id: 'slide_deck', providers: GROQ_FIRST, input: 'text', validation: 'slide_deck', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
