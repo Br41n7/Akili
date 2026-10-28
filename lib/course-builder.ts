@@ -9,9 +9,9 @@
  * Pure functions only (no React, no network) so they can be tested directly.
  */
 export type Depth = 'quick' | 'standard' | 'deep';
-export interface BuildOptions { depth: Depth; goals: string; beyondNotes: boolean; /** Check beyond-notes material against the web (only when the server allows it). */ web?: boolean }
+export interface BuildOptions { depth: Depth; goals: string; beyondNotes: boolean; /** Which of the learner's materials to use (all when empty). */ sourceIds?: string[]; /** Check beyond-notes material against the web (only when the server allows it). */ web?: boolean }
 export interface Research { notes: string; sources: { title: string; url: string }[] }
-export interface Source { name: string; content: string }
+export interface Source { id?: string; name: string; content: string }
 export interface OutlineLesson { title: string; objective: string }
 export interface OutlineModule { title: string; summary: string; lessons: OutlineLesson[] }
 export interface Outline { title: string; description: string; estimated_duration: string; modules: OutlineModule[] }
@@ -26,7 +26,7 @@ export const DEFAULT_OPTIONS: BuildOptions = { depth: 'standard', goals: '', bey
 export const MAX_GOALS = 400;
 export const MAX_MODULES = 12;
 
-const SOURCE_BUDGET = 40_000; // how much of the learner's material is considered at all
+const CHARS_PER_PAGE = 1_800;
 export const OUTLINE_BUDGET = 12_000;
 export const MODULE_BUDGET = 9_000;
 
@@ -95,7 +95,52 @@ export function selectContext(sources: Source[], query: string, budget = MODULE_
   return format([...chosen].sort((a, b) => a - b).map(i => chunks[i]));
 }
 
-export const totalChars = (sources: Source[]) => Math.min(SOURCE_BUDGET, sources.reduce((n, s) => n + (s.content?.length || 0), 0));
+export const totalChars = (sources: Source[]) => sources.reduce((n, s) => n + (s.content?.length || 0), 0);
+export const pagesOf = (chars: number) => (chars <= 0 ? 0 : Math.max(1, Math.round(chars / CHARS_PER_PAGE)));
+
+// ── How much of the learner's material a plan may read ───────────────────────
+export interface CoverageItem { id?: string; name: string; chars: number; usedChars: number }
+export interface Coverage { totalChars: number; usedChars: number; truncated: boolean; items: CoverageItem[] }
+
+/** Cut at a paragraph or sentence end near the limit, so a lesson is never built on half a sentence. */
+function cutAt(text: string, limit: number): string {
+  if (text.length <= limit) return text;
+  const head = text.slice(0, limit); const floor = Math.floor(limit * 0.8);
+  const para = head.lastIndexOf('\n\n'); if (para >= floor) return head.slice(0, para).trimEnd();
+  const sentence = Math.max(head.lastIndexOf('. '), head.lastIndexOf('.\n')); if (sentence >= floor) return head.slice(0, sentence + 1);
+  return head.trimEnd();
+}
+
+/**
+ * Fit the learner's materials inside a budget. Short files are kept whole; what is left is shared equally between the
+ * long ones, so one huge file cannot push every other file out. Each long file keeps its beginning. Never silent: the
+ * returned coverage says exactly what was and was not read.
+ */
+export function applyBudget(sources: Source[], budget: number): { sources: Source[]; coverage: Coverage } {
+  const live = sources.filter(s => s.content?.trim());
+  const sizes = live.map(s => s.content.length); const total = sizes.reduce((a, b) => a + b, 0);
+  const limit = Math.max(0, Math.floor(budget));
+  if (total <= limit) return { sources: live, coverage: { totalChars: total, usedChars: total, truncated: false, items: live.map(s => ({ id: s.id, name: s.name, chars: s.content.length, usedChars: s.content.length })) } };
+  // Water-filling: find the per-file cap so the capped sizes add up to the budget.
+  let lo = 0, hi = Math.max(...sizes);
+  for (let i = 0; i < 40; i++) { const mid = (lo + hi) / 2; const sum = sizes.reduce((n, z) => n + Math.min(z, mid), 0); if (sum > limit) hi = mid; else lo = mid; }
+  const cap = Math.floor(lo);
+  const kept = live.map(s => ({ ...s, content: cutAt(s.content, cap) }));
+  const items = live.map((s, i) => ({ id: s.id, name: s.name, chars: s.content.length, usedChars: kept[i].content.length }));
+  return { sources: kept.filter(s => s.content.trim()), coverage: { totalChars: total, usedChars: items.reduce((n, x) => n + x.usedChars, 0), truncated: true, items } };
+}
+
+/** Plain-words summary shown before building and after. */
+export function coverageNotice(c: Coverage, opts: { upgradePages?: number } = {}): string {
+  if (!c.totalChars) return 'Add a document or note in Materials first.';
+  if (!c.truncated) return `Akili will read all of your selected material (about ${pagesOf(c.totalChars)} page${pagesOf(c.totalChars) === 1 ? '' : 's'}).`;
+  const cut = c.items.filter(i => i.usedChars < i.chars).slice(0, 3).map(i => i.name);
+  return `Your selected material is about ${pagesOf(c.totalChars)} pages, and on this plan Akili reads about ${pagesOf(c.usedChars)}: only the beginning of ${cut.join(', ')}${c.items.filter(i => i.usedChars < i.chars).length > 3 ? ' and others' : ''}. The rest is not used. Choose fewer files to read them in full${opts.upgradePages ? `, or use a paid plan, which reads about ${opts.upgradePages} pages` : ''}.`;
+}
+
+/** Deep courses are the largest request, so they are a paid feature. */
+export const depthAllowed = (depth: Depth, deepCourses: boolean) => depth !== 'deep' || deepCourses;
+
 
 // ── Prompts ──────────────────────────────────────────────────────────────────
 const scopeBlock = (s: LearnerScope) => `Learner level and scope:
@@ -165,15 +210,15 @@ Return JSON: {"lessons": [{"lesson_number": number, "title": string, "origin": "
 
 // ── Stored shape: pending modules live inside courses.modules, so no schema change is needed ────
 export interface StoredModule {
-  id: string; module_number: number; title: string; estimated_time?: string; summary?: string;
-  status?: 'pending'; outline?: OutlineLesson[]; build_opts?: Pick<BuildOptions, 'goals' | 'beyondNotes' | 'web'>; lessons: any[];
+  id: string; module_number: number; title: string; estimated_time?: string; summary?: string; /** Materials this module was built from; later modules reuse them. */ source_ids?: string[];
+  status?: 'pending'; outline?: OutlineLesson[]; build_opts?: Pick<BuildOptions, 'goals' | 'beyondNotes' | 'web' | 'sourceIds'>; lessons: any[];
 }
 export const isPending = (m: { status?: string } | null | undefined) => m?.status === 'pending';
 
 export function pendingModules(outline: Outline, opts: BuildOptions, startAt = 0): StoredModule[] {
   return outline.modules.map((m, i) => ({
     id: `m${startAt + i + 1}`, module_number: startAt + i + 1, title: m.title, summary: m.summary, estimated_time: '',
-    status: 'pending' as const, outline: m.lessons, build_opts: { goals: opts.goals, beyondNotes: opts.beyondNotes, web: !!(opts.web && opts.beyondNotes) }, lessons: [],
+    status: 'pending' as const, outline: m.lessons, build_opts: { goals: opts.goals, beyondNotes: opts.beyondNotes, web: !!(opts.web && opts.beyondNotes), sourceIds: opts.sourceIds || [] }, lessons: [],
   }));
 }
 
@@ -182,7 +227,7 @@ export function fillModule(modules: StoredModule[], index: number, lessons: any[
   return modules.map((m, i) => {
     if (i !== index) return m;
     const { status: _s, outline: _o, build_opts: _b, ...rest } = m;
-    return { ...rest, lessons: lessons.map((l, k) => ({ ...l, id: `${m.id}-l${k + 1}`, lesson_number: k + 1 })) };
+    return { ...rest, ...(_b?.sourceIds?.length ? { source_ids: _b.sourceIds } : {}), lessons: lessons.map((l, k) => ({ ...l, id: `${m.id}-l${k + 1}`, lesson_number: k + 1 })) };
   });
 }
 

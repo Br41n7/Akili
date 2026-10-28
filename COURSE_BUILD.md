@@ -45,3 +45,18 @@ What the app now does by itself: retries a busy service twice (after 4 s and 10 
 The free daily allowance is 20 AI requests. A staged course uses one request for the outline plus one or two per module, so a deep course can use most of a day. Raise it with the server variable `AI_FREE_DAILY_LIMIT` (for example 60); it is capped at 1000.
 
 Course outlines and modules now run at low reasoning effort with output caps (3,000 and 7,000 tokens). That keeps Gemini inside its time limit and keeps requests small for Groq's per-minute token limits.
+
+## Material limits by plan
+
+How much of a learner's material a course may read depends on the plan (`lib/plan.ts`):
+
+| | Free (default) | Paid |
+|---|---|---|
+| Material read | about 30,000 characters (~17 pages) | about 150,000 (~83 pages) |
+| Deep depth | locked | allowed |
+
+- Learners pick which materials to use (checklist with page counts). Nothing selected means all.
+- If the selection is too big, Akili does **not** silently cut. Short files are kept whole, the remaining budget is shared fairly between long files (each keeps its beginning, cut at a sentence end), and a notice says exactly what was read and what was not. The same notice shows before building and as a toast after.
+- "Add more to this course" reuses the materials the course was built from.
+- Turn paid behaviour on with `NEXT_PUBLIC_AKILI_PLAN=pro`, or per feature: `NEXT_PUBLIC_AKILI_FEATURES=long_materials,deep_courses`.
+- Honest caveat: `NEXT_PUBLIC_*` flags are deployment-wide and the limit is applied in the browser. It is a product gate, not a security one. For real per-user paid plans, store the plan on the user's profile and pass it as `capabilities(env, userPlan)`; also enforce the limit server-side then. The function already accepts that argument.

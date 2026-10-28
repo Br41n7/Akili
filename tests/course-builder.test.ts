@@ -98,7 +98,7 @@ describe('pending modules', () => {
   const outline: Outline = { title: 'B', description: '', estimated_duration: '', modules: [{ title: 'Cells', summary: 's', lessons: [{ title: 'L1', objective: '' }] }, { title: 'Energy', summary: '', lessons: [{ title: 'L2', objective: '' }] }, { title: 'Genes', summary: '', lessons: [{ title: 'L3', objective: '' }] }] };
   it('starts as pending shells that remember their options, and fills one at a time with unique ids', () => {
     let mods = pendingModules(outline, { depth: 'standard', goals: 'genes', beyondNotes: true });
-    expect(mods.every(isPending)).toBe(true); expect(mods[0].build_opts).toEqual({ goals: 'genes', beyondNotes: true, web: false }); expect(builtCount(mods)).toBe(0); expect(nextPendingIndex(mods)).toBe(0);
+    expect(mods.every(isPending)).toBe(true); expect(mods[0].build_opts).toEqual({ goals: 'genes', beyondNotes: true, web: false, sourceIds: [] }); expect(builtCount(mods)).toBe(0); expect(nextPendingIndex(mods)).toBe(0);
     mods = fillModule(mods, 1, [{ title: 'L2', content: 'c' }, { title: 'L2b', content: 'c' }]);
     expect(isPending(mods[1])).toBe(false); expect(mods[1].outline).toBeUndefined(); expect(mods[1].build_opts).toBeUndefined();
     expect(mods[1].lessons.map((l: any) => l.id)).toEqual(['m2-l1', 'm2-l2']); expect(nextPendingIndex(mods)).toBe(0); expect(nextPendingIndex(mods, 1)).toBe(2);
