@@ -212,6 +212,8 @@ export function providerCandidates(provider: ProviderId, opts: Pick<AIOptions, '
       return [{ provider, model, apiKey, userKey: false }];
     }
     case 'deepseek': {
+      // DeepSeek is on hold: it is only used when AI_ENABLE_DEEPSEEK=true, even if a key is set.
+      if (env('AI_ENABLE_DEEPSEEK').toLowerCase() !== 'true') return [];
       const apiKey = env('DEEPSEEK_API_KEY');
       return apiKey && !wantsImage ? [{ provider, model: env('DEEPSEEK_MODEL') || 'deepseek-chat', apiKey, userKey: false }] : [];
     }
@@ -421,12 +423,12 @@ async function callChatCompletions(c: Candidate, o: AIOptions, timeoutMs: number
     : o.prompt;
 
   const maxTokens = o.maxOutputTokens ?? getTask(o.task).maxOutputTokens ?? envNumber('AI_MAX_OUTPUT_TOKENS', getTask(o.task).heavy ? 16000 : 8000);
-  const build = (withReasoning: boolean) => ({
+  const build = (withReasoning: boolean, jsonMode = true) => ({
     model: c.model,
     messages: [{ role: 'system', content: system }, { role: 'user', content: userContent }],
     temperature: 0.7,
     [cfg.tokensParam]: maxTokens,
-    ...(o.format === 'json' ? { response_format: { type: 'json_object' } } : {}),
+    ...(o.format === 'json' && jsonMode ? { response_format: { type: 'json_object' } } : {}),
     ...(withReasoning && cfg.reasoningEffort ? { reasoning_effort: cfg.reasoningEffort } : {}),
   });
 
@@ -439,6 +441,10 @@ async function callChatCompletions(c: Candidate, o: AIOptions, timeoutMs: number
   } catch (err) {
     if (err instanceof ProviderFailure && err.kind === 'bad_request' && cfg.reasoningEffort && /reasoning/i.test(err.detail)) {
       data = await postJSON(url, headers, build(false), timeoutMs, o.signal);
+    } else if (err instanceof ProviderFailure && err.kind === 'bad_request' && o.format === 'json' && err.code === 'json_validate_failed') {
+      // The provider's strict JSON mode rejected the model's output (often a stray backslash, as in LaTeX). Ask again without
+      // strict mode: the format rules are already in the prompt and our own parser and repair step check the result.
+      data = await postJSON(url, headers, build(true, false), timeoutMs, o.signal);
     } else throw err;
   }
 

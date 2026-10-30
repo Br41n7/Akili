@@ -1,6 +1,6 @@
 import { vi } from 'vitest';
 
-export const KEYS = ['GEMINI_API_KEY', 'GROQ_API_KEY', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'GROQ_VISION_MODEL', 'OPENAI_MODEL', 'AI_PROVIDER_ORDER', 'GROQ_FALLBACK_MODEL', 'GEMINI_FALLBACK_MODEL', 'GEMINI_VISION_MODEL', 'GEMINI_MODEL'] as const;
+export const KEYS = ['GEMINI_API_KEY', 'GROQ_API_KEY', 'OPENAI_API_KEY', 'DEEPSEEK_API_KEY', 'AI_ENABLE_DEEPSEEK', 'GROQ_VISION_MODEL', 'OPENAI_MODEL', 'AI_PROVIDER_ORDER', 'GROQ_FALLBACK_MODEL', 'GEMINI_FALLBACK_MODEL', 'GEMINI_VISION_MODEL', 'GEMINI_MODEL'] as const;
 
 /** Clear every provider variable, then set only the ones given. */
 export function setEnv(vars: Partial<Record<(typeof KEYS)[number], string>> = {}) {
@@ -15,7 +15,7 @@ export type Provider = 'gemini' | 'groq' | 'openai' | 'deepseek';
 export type Reply = { status?: number; text?: string; body?: string; hang?: boolean; throws?: boolean };
 
 const hostOf = (url: string): Provider =>
-  url.includes('generativelanguage') ? 'gemini' : url.includes('groq.com') ? 'groq' : url.includes('openai.com') ? 'openai' : 'deepseek';
+  new URL(url).hostname.endsWith('generativelanguage.googleapis.com') ? 'gemini' : new URL(url).hostname.endsWith('groq.com') ? 'groq' : new URL(url).hostname.endsWith('openai.com') ? 'openai' : 'deepseek';
 
 export const geminiBody = (text: string) => JSON.stringify({ candidates: [{ content: { parts: [{ text }] }, finishReason: 'STOP' }] });
 export const chatBody = (text: string) => JSON.stringify({ choices: [{ message: { content: text }, finish_reason: 'stop' }] });

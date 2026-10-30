@@ -40,7 +40,7 @@ What the failure kinds usually mean:
 - `auth 401/402/403`, `model_missing 404`: a key or model name in the environment is wrong, or the account is out of credit (402, for example DeepSeek with no balance). Top it up or remove that key from the environment.
 - `empty`, `truncated`: the model returned nothing, or ran out of room.
 
-What the app now does by itself: retries a busy service twice (after 4 s and 10 s), pauses 1.5 s between modules, and asks for at most 3 lessons per request so each answer is smaller.
+What the app now does by itself: retries a busy service twice (after 4 s and 10 s), pauses 1.5 s between modules, and asks for at most 2 lessons per request so each answer is smaller.
 
 The free daily allowance is 20 AI requests. A staged course uses one request for the outline plus one or two per module, so a deep course can use most of a day. Raise it with the server variable `AI_FREE_DAILY_LIMIT` (for example 60); it is capped at 1000.
 
@@ -60,3 +60,7 @@ How much of a learner's material a course may read depends on the plan (`lib/pla
 - "Add more to this course" reuses the materials the course was built from.
 - Turn paid behaviour on with `NEXT_PUBLIC_AKILI_PLAN=pro`, or per feature: `NEXT_PUBLIC_AKILI_FEATURES=long_materials,deep_courses`.
 - Honest caveat: `NEXT_PUBLIC_*` flags are deployment-wide and the limit is applied in the browser. It is a product gate, not a security one. For real per-user paid plans, store the plan on the user's profile and pass it as `capabilities(env, userPlan)`; also enforce the limit server-side then. The function already accepts that argument.
+
+## Why only course modules failed while flashcards and study guides worked (hypothesis, not confirmed)
+
+Lessons contain LaTeX formulas, whose backslashes are invalid inside JSON strings. Groq's strict JSON mode rejects such output with `json_validate_failed` (the `groq: bad_request 400` in the error line). Flashcards and study guides have no formulas, so they pass. Changes: the prompt now tells the model to double backslashes; on `json_validate_failed` the same model is asked again without strict JSON mode (our own parser and repair step check it); lessons are requested 2 at a time instead of 3 so Gemini is less likely to time out. If the error line still shows a different code after deploying, send it.

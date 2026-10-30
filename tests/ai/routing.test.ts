@@ -38,7 +38,7 @@ describe('provider order comes from the task registry', () => {
   });
 
   it('prefers DeepSeek for routine tasks when it is configured, and skips it when it is not', async () => {
-    setEnv({ DEEPSEEK_API_KEY: 'dsk-aaaaaaaaaaaaaaaaaaaa', GROQ_API_KEY: 'gsk_aaaaaaaaaaaaaaaaaaaa' });
+    setEnv({ AI_ENABLE_DEEPSEEK: 'true', DEEPSEEK_API_KEY: 'dsk-aaaaaaaaaaaaaaaaaaaa', GROQ_API_KEY: 'gsk_aaaaaaaaaaaaaaaaaaaa' });
     mockProviders({ deepseek: [{ text: VALID_FLASHCARD }] });
     let { runAIDetailed } = await load();
     expect((await runAIDetailed({ ...base, task: 'mnemonic' })).provider).toBe('deepseek');
@@ -182,7 +182,7 @@ describe('malformed JSON', () => {
 
 describe('image input', () => {
   it('never sends an image to a text-only provider', async () => {
-    setEnv({ DEEPSEEK_API_KEY: 'dsk-aaaaaaaaaaaaaaaaaaaa' });
+    setEnv({ AI_ENABLE_DEEPSEEK: 'true', DEEPSEEK_API_KEY: 'dsk-aaaaaaaaaaaaaaaaaaaa' });
     const net = mockProviders({ deepseek: [{ text: 'ok' }] });
     const { runAIDetailed } = await load();
     await expect(runAIDetailed({ ...base, task: 'snap_read', image: IMAGE })).rejects.toMatchObject({ code: 'AI_NO_VISION' });
@@ -304,7 +304,7 @@ describe('course tasks stay small and say why a provider failed', () => {
     expect(gem.maxOutputTokens).toBe(7000); expect(gem.thinkingConfig).toEqual({ thinkingLevel: 'low' });
   });
   it('an out-of-credit provider (402) is skipped, and each failure is named with its own error code', async () => {
-    setEnv({ GROQ_API_KEY: 'gsk_aaaaaaaaaaaaaaaaaaaa', GEMINI_API_KEY: 'AIzaBBBBBBBBBBBBBBBBBBBBBBBB', DEEPSEEK_API_KEY: 'sk-cccccccccccccccccccc' });
+    setEnv({ GROQ_API_KEY: 'gsk_aaaaaaaaaaaaaaaaaaaa', GEMINI_API_KEY: 'AIzaBBBBBBBBBBBBBBBBBBBBBBBB', AI_ENABLE_DEEPSEEK: 'true', DEEPSEEK_API_KEY: 'sk-cccccccccccccccccccc' });
     const net = mockProviders({
       deepseek: [{ status: 402, body: JSON.stringify({ error: { message: 'Insufficient Balance', type: 'unknown_error' } }) }],
       groq: [{ status: 400, body: JSON.stringify({ error: { message: 'Failed to generate JSON: <the model output, possibly private>', code: 'json_validate_failed' } }) }],
@@ -323,5 +323,31 @@ describe('course tasks stay small and say why a provider failed', () => {
     expect(providerErrorCode('{"error":{"type":"invalid_request_error"}}')).toBe('invalid_request_error');
     expect(providerErrorCode('{"error":{"code":"has spaces and <b>html</b>"}}')).toBeUndefined();
     expect(providerErrorCode('plain text, not JSON')).toBeUndefined(); expect(providerErrorCode('')).toBeUndefined();
+  });
+});
+
+describe('DeepSeek is on hold', () => {
+  it('is never called while AI_ENABLE_DEEPSEEK is not true, even with a key set', async () => {
+    setEnv({ DEEPSEEK_API_KEY: 'dsk-aaaaaaaaaaaaaaaaaaaa', GROQ_API_KEY: 'gsk_aaaaaaaaaaaaaaaaaaaa' });
+    const { providerCandidates } = await import('@/lib/ai');
+    expect(providerCandidates('deepseek', {})).toEqual([]);
+    process.env.AI_ENABLE_DEEPSEEK = 'true';
+    expect(providerCandidates('deepseek', {}).length).toBe(1);
+    delete process.env.AI_ENABLE_DEEPSEEK;
+  });
+});
+
+describe('strict JSON mode rejection', () => {
+  it('retries the same Groq model once without response_format when it says json_validate_failed', async () => {
+    setEnv({ GROQ_API_KEY: 'gsk_aaaaaaaaaaaaaaaaaaaa' });
+    const net = mockProviders({ groq: [
+      { status: 400, body: JSON.stringify({ error: { message: 'Failed to generate JSON', code: 'json_validate_failed' } }) },
+      { text: '{"lessons":[]}' },
+    ] });
+    const { runAIDetailed } = await load();
+    const r = await runAIDetailed({ ...base, format: 'json', task: 'course_module' });
+    expect(r.text).toContain('lessons'); expect(net.count('groq')).toBe(2);
+    expect(net.calls[0].body.response_format).toEqual({ type: 'json_object' });
+    expect(net.calls[1].body.response_format).toBeUndefined();
   });
 });

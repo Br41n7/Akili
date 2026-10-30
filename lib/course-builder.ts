@@ -200,6 +200,7 @@ Requirements for each lesson:
 - Only where the materials support them (otherwise an empty array, never filler): "definitions" (2 to 6 terms), "formulas" ("latex" as bare TeX with no $ delimiters, with each symbol in "variables"), and "exercises" (1 to 3 short open-ended items with "hint", "solution_steps", "answer").
 - Every practice question is answerable from the lesson, with four options "A) ", "B) ", "C) ", "D) " and correct_answer as just the letter.
 - Where a structure, process, cycle or comparison is central, include a short "Visual explanation" heading with what should be drawn and what each label means. Do not fabricate detailed structures.
+JSON rules: every backslash inside a string must be doubled (write "\\\\frac", not "\\frac"), and line breaks inside strings must be written as \\n.
 Return JSON: {"lessons": [{"lesson_number": number, "title": string, "origin": "notes"|"beyond_notes", "learning_objectives": [string], "content": "markdown", "key_concepts": [string],
  "worked_example": {"problem": string, "solution_steps": [string], "answer": string},
  "common_mistakes": [string], "definitions": [{"term": string, "meaning": string}],

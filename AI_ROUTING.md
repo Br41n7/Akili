@@ -28,7 +28,7 @@ A personal Groq key is not trusted until a provider accepts it. When the allowan
 a request with a key may use only that key.
 
 ## Environment
-`GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY` (all optional, at least one needed),
+`GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENAI_API_KEY`, `DEEPSEEK_API_KEY` (all optional, at least one needed). **DeepSeek is on hold**: its key is ignored unless `AI_ENABLE_DEEPSEEK=true`,
 `GEMINI_MODEL`, `GROQ_MODEL`, `OPENAI_MODEL`, `DEEPSEEK_MODEL`, `GROQ_VISION_MODEL`, `GEMINI_VISION_MODEL` (a stronger Gemini model used only for pictures; text tasks keep `GEMINI_MODEL`),
 `AI_PROVIDER_ORDER` (operator override for every task), `AI_TIMEOUT_MS`, `AI_TOTAL_BUDGET_MS`.
 DeepSeek is preferred for routine text tasks (`mnemonic`, `shortcut`, `study_plan`) only when its key is set.
@@ -44,3 +44,7 @@ Two steps, on purpose. `snap_read` (picture required, Gemini first) transcribes 
 
 ## Course building
 `course_outline` (BASE timeout) writes module and lesson titles; `course_module` (HEAVY timeout) writes one module's lessons. The old whole-course task `course_builder` remains registered for older callers. See `COURSE_BUILD.md`.
+
+## DeepSeek is on hold
+
+`DEEPSEEK_API_KEY` is ignored unless `AI_ENABLE_DEEPSEEK=true`. Tasks that listed DeepSeek first fall through to Groq or Gemini. Remove the key from Vercel or leave it; either way it is not called.

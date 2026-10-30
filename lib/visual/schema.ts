@@ -14,6 +14,7 @@
  *
  * This module is safe to import on both server and client.
  */
+import { stripTags } from '@/lib/text-safe';
 import { z } from 'zod';
 import { depthRanks } from './depth';
 import { DIRECTION_TERMS, OPPOSITE, RELATIONS, RELATION_KEYS, canonicalRelation, directionOf, type DirectionTerm } from './vocab';
@@ -50,7 +51,7 @@ const SEQUENCE_TYPES: VisualType[] = ['process', 'cycle', 'flowchart', 'timeline
 // ── Text hygiene ────────────────────────────────────────────────────────────
 
 const clean = (s: string) =>
-  s.replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/<\/?[a-z][^>]*>/gi, '').replace(/\s+/g, ' ').trim();
+  stripTags(s.replace(/[\u0000-\u001f\u007f]/g, ' ')).replace(/\s+/g, ' ').trim();
 /**
  * Cut at a word boundary with an ellipsis. A long label or description is a cosmetic problem, so it is
  * shortened rather than rejecting an otherwise valid diagram. Scientific consistency is still checked below.

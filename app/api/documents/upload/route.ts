@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { decodeEntities, stripTags } from '@/lib/text-safe';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { runAI } from '@/lib/ai';
 
@@ -30,7 +31,7 @@ async function extractTextFromPptx(buffer: Buffer): Promise<string> {
     // Extract text inside <a:t> tags
     const textMatches = slideXml.match(/<a:t[^>]*>(.*?)<\/a:t>/gi) || [];
     const slideContent = textMatches
-      .map(match => match.replace(/<[^>]+>/g, '').trim())
+      .map(match => decodeEntities(stripTags(match)).trim())
       .filter(Boolean)
       .join(' ');
     if (slideContent) {

@@ -1,5 +1,6 @@
 'use client';
 import { useState } from 'react';
+import { isSafeImageType, safeImageSrc } from '@/lib/text-safe';
 import { supabase } from '@/lib/supabase';
 import { callAIJSON, errorMessage } from '@/lib/utils';
 import { compactLearnerContext, getLearnerContext, recordEvidence } from '@/lib/adaptive';
@@ -53,6 +54,7 @@ export default function QuizMode({ projectId, userId, region, persona }: Props) 
       r.readAsDataURL(file);
     }).catch(() => '');
     if (!base64) return void toast.error('That picture could not be read.');
+    if (!isSafeImageType(file.type)) return void toast.error('Use a PNG, JPEG, WebP or GIF picture.');
     setDiagram({ base64, mimeType: file.type });
   };
 
@@ -213,10 +215,10 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
             </summary>
             <div className="space-y-5 border-t border-rule p-4">
               <QuizSettings types={types} onTypes={setTypes} count={count} onCount={setCount} />
-              {diagram ? (
+              {diagram && safeImageSrc(diagram) ? (
                 <div className="flex items-center gap-3 rounded-xl bg-chalk p-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={`data:${diagram.mimeType};base64,${diagram.base64}`} alt="Attached diagram" className="h-14 w-14 rounded-lg object-cover" />
+                  <img src={safeImageSrc(diagram)} alt="Attached diagram" className="h-14 w-14 rounded-lg object-cover" />
                   <span className="flex-1 text-sm font-medium">Diagram attached</span>
                   <button onClick={() => setDiagram(null)} aria-label="Remove diagram" className="flex h-11 w-11 items-center justify-center rounded-lg text-muted active:bg-rule"><X size={18} /></button>
                 </div>
@@ -274,9 +276,9 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
           <ProgressBar value={((index + (revealed ? 1 : 0)) / questions.length) * 100} label="Quiz progress" />
         </div>
 
-        {diagram && (
+        {diagram && safeImageSrc(diagram) && (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={`data:${diagram.mimeType};base64,${diagram.base64}`} alt="Diagram for this question" className="max-h-72 w-full rounded-2xl border border-rule bg-paper object-contain" />
+          <img src={safeImageSrc(diagram)} alt="Diagram for this question" className="max-h-72 w-full rounded-2xl border border-rule bg-paper object-contain" />
         )}
 
         <div className="space-y-3">

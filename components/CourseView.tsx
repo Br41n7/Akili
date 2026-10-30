@@ -126,7 +126,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
     }
     // Lessons are requested a few at a time: smaller answers are faster, less likely to be cut off, and kinder to free-tier limits.
     const outline = outlineOf(m); const titles = current.modules.map((x: any) => x.title); const context = selectContext(sources, query);
-    const parts = outline.lessons.length ? balancedChunks(outline.lessons.length, 3) : [null];
+    const parts = outline.lessons.length ? balancedChunks(outline.lessons.length, 2) : [null];
     const written: any[] = [];
     for (const part of parts) {
       const data = await ai('course_module', modulePrompt(scope(), bopts, titles, outline, m.module_number, context, research, part ? { lessons: outline.lessons.slice(part.start, part.start + part.count), startNumber: part.start + 1 } : undefined));

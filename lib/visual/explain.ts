@@ -7,6 +7,7 @@
  *      if it is keyed to real element ids and covers most of the diagram; otherwise we fall back to (1).
  */
 import { callAIJSON } from '@/lib/utils';
+import { plainText } from '@/lib/text-safe';
 import { elementMap, orderedElements, type VisualSpec } from './schema';
 import { describeRelation } from './vocab';
 
@@ -128,12 +129,12 @@ export function acceptAIExplanation(spec: VisualSpec, raw: { summary?: unknown; 
   const parts: ExplanationPart[] = [];
   for (const p of Array.isArray(raw.parts) ? raw.parts : []) {
     const id = typeof p?.id === 'string' ? p.id : '';
-    const text = typeof p?.text === 'string' ? p.text.replace(/<[^>]*>/g, '').trim() : '';
+    const text = typeof p?.text === 'string' ? plainText(p.text) : '';
     if (!known.has(id) || seen.has(id) || !text) continue;
     seen.add(id);
     parts.push({ id, text: text.slice(0, 600) });
   }
-  const summary = typeof raw.summary === 'string' ? raw.summary.replace(/<[^>]*>/g, '').trim().slice(0, 700) : '';
+  const summary = typeof raw.summary === 'string' ? plainText(raw.summary).slice(0, 700) : '';
   if (!summary || parts.length < Math.ceil(spec.elements.length * 0.6)) return null;
   return { summary, parts, source: 'ai' };
 }
