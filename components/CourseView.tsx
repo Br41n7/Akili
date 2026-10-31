@@ -1,6 +1,7 @@
 'use client';
 import { addLesson, saveCompletedLessons } from '@/lib/course-progress';
-import { capabilities } from '@/lib/plan';
+import { usePlan } from '@/lib/use-plan';
+import { pagesOf } from '@/lib/course-builder';
 import { dbErrorNote, dbSafe } from '@/lib/text-safe';
 import CourseBuildForm from '@/components/CourseBuildForm';
 import {
@@ -46,7 +47,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
   const [addTopic, setAddTopic] = useState('');
   const [addBeyond, setAddBeyond] = useState(false);
   const busyRef = useRef(false);
-  const caps = capabilities(); const webOn = caps.has('search_grounding');
+  const { caps, pro } = usePlan(); const webOn = caps.has('search_grounding');
   const deepOn = caps.has('deep_courses'); const budget = caps.limits.courseMaterialChars;
   const [library, setLibrary] = useState<Source[]>([]);
   const [openModule, setOpenModule] = useState<string | null>(null);
@@ -102,7 +103,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
   useEffect(() => { if (status === 'ready') loadSources().then(setLibrary).catch(() => {}); }, [status, showRebuild, course?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const materials = useMemo(() => library.map(s => ({ id: s.id as string, name: s.name, chars: s.content.length })), [library]);
   const cover = useMemo(() => usable(library, opts.sourceIds).coverage, [library, opts.sourceIds, budget]); // eslint-disable-line react-hooks/exhaustive-deps
-  const notice = coverageNotice(cover, { upgradePages: caps.plan === 'pro' ? 0 : Math.round(150_000 / 1800) });
+  const notice = coverageNotice(cover, { upgradePages: caps.plan === 'pro' ? 0 : pagesOf(pro.limits.course_material_chars) });
   const scope = (): LearnerScope => ({
     topic: project ? studySubjectText(project) : 'the learner’s topic', secondary: project ? levelOf(project) === 'secondary' : false,
     classLevel: String(project?.class_level || project?.study_year || ''), region,
@@ -164,7 +165,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
       if (!sources.length) { setGenError('Add at least one document or note in Materials first. Akili builds the course from what you add.'); return; }
       const clean = { ...opts, depth: depthAllowed(opts.depth, deepOn) ? opts.depth : 'standard' as const, goals: cleanGoals(opts.goals), web: webOn };
       const size = sizeFor(clean.depth, totalChars(sources), !!clean.goals);
-      if (coverage.truncated) toast(coverageNotice(coverage, { upgradePages: caps.plan === 'pro' ? 0 : 83 }), { duration: 9000 });
+      if (coverage.truncated) toast(coverageNotice(coverage, { upgradePages: caps.plan === 'pro' ? 0 : pagesOf(pro.limits.course_material_chars) }), { duration: 9000 });
       const outline = await ai('course_outline', outlinePrompt(scope(), clean, outlineContext(sources), size));
       const modules = pendingModules(outline, clean);
       const { data: saved, error } = await supabase.from('courses').insert({

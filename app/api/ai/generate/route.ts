@@ -5,7 +5,8 @@ import { supabaseAdmin } from '@/lib/supabase/admin';
 import { runAIDetailed, runAIJSON, toPublicError, AIServiceError } from '@/lib/ai';
 import { getValidator, VALIDATION_TYPES } from '@/lib/ai-schemas';
 import { getTask, isKnownTask, PERSONA_IDS } from '@/lib/ai-tasks';
-import { FREE_DAILY_LIMIT, planQuota, recordUsage } from '@/lib/ai-quota';
+import { planQuota, recordUsage } from '@/lib/ai-quota';
+import { loadUserPlan } from '@/lib/plans-db';
 import { buildCulturalBlock } from '@/lib/cultural';
 import { buildProjectContext, type ProjectRecord } from '@/lib/project-context';
 
@@ -86,8 +87,10 @@ export async function POST(req: NextRequest) {
     const { data: usage } = await supabaseAdmin
       .from('ai_usage').select('count').eq('user_id', user.id).eq('usage_date', today).maybeSingle();
     const usedToday = usage?.count ?? 0;
-    const quota = planQuota({ usedToday, hasOwnKey });
-    const limitMessage = `You have used all ${FREE_DAILY_LIMIT} free AI requests for today. They reset at midnight.`;
+    const userPlan = await loadUserPlan(supabaseAdmin, user.id); // the allowance comes from the learner's plan (editable by an admin)
+    const dailyLimit = userPlan.plan.limits.daily_ai;
+    const quota = planQuota({ usedToday, hasOwnKey, limit: dailyLimit });
+    const limitMessage = userPlan.id === 'pro' ? `You have used all ${dailyLimit} AI requests for today. They reset at midnight.` : `You have used all ${dailyLimit} free AI requests for today. They reset at midnight. Pro gives you more.`;
     if (!quota.allow) return fail(limitMessage, 429, 'DAILY_LIMIT');
 
     // Project context is loaded on the server so the client cannot spoof it.
@@ -136,7 +139,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Count only requests that produced an answer, and only when the shared providers answered.
-    if (!usedOwnKey) await recordUsage(supabaseAdmin, user.id, today, usedToday);
+    if (!usedOwnKey) await recordUsage(supabaseAdmin, user.id, today, usedToday, dailyLimit);
 
     return NextResponse.json({ result, ...(keyRejected ? { keyRejected: true } : {}) });
   } catch (err) {

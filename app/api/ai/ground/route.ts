@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { capabilities } from '@/lib/plan';
-import { FREE_DAILY_LIMIT, planQuota, recordUsage } from '@/lib/ai-quota';
+import { planCapabilities, loadUserPlan } from '@/lib/plans-db';
+import { planQuota, recordUsage } from '@/lib/ai-quota';
 import { groundedSearch, groundingPrompt } from '@/lib/grounding';
 
 export const runtime = 'nodejs';
@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return fail('Please sign in again.', 401, 'UNAUTHENTICATED');
-  if (!capabilities().has('search_grounding')) return fail('Web research is not available on this plan.', 403, 'GROUNDING_OFF');
+  const userPlan = await loadUserPlan(supabaseAdmin, user.id);
+  if (!planCapabilities(userPlan.plan).has('search_grounding')) return fail('Web research is not available on this plan.', 403, 'GROUNDING_OFF');
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) return fail('Web research is not set up on this server.', 503, 'GROUNDING_NOT_CONFIGURED');
 
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
   const today = new Date().toISOString().split('T')[0];
   const { data: usage } = await supabaseAdmin.from('ai_usage').select('count').eq('user_id', user.id).eq('usage_date', today).maybeSingle();
   const usedToday = usage?.count ?? 0;
-  if (!planQuota({ usedToday, hasOwnKey: false }).allow) return fail(`You have used all ${FREE_DAILY_LIMIT} AI requests for today. They reset at midnight.`, 429, 'DAILY_LIMIT');
+  if (!planQuota({ usedToday, hasOwnKey: false, limit: userPlan.plan.limits.daily_ai }).allow) return fail(`You have used all ${userPlan.plan.limits.daily_ai} AI requests for today. They reset at midnight.`, 429, 'DAILY_LIMIT');
 
   try {
     const result = await groundedSearch({
@@ -45,7 +46,7 @@ export async function POST(req: NextRequest) {
       prompt: groundingPrompt(parsed.data.topic, parsed.data.lessons, parsed.data.level), signal: req.signal,
     });
     if (!result) return fail('No reliable web sources were found for this topic.', 404, 'NO_SOURCES');
-    await recordUsage(supabaseAdmin as any, user.id, today, usedToday);
+    await recordUsage(supabaseAdmin as any, user.id, today, usedToday, userPlan.plan.limits.daily_ai);
     return NextResponse.json({ notes: result.notes, sources: result.sources });
   } catch (e) {
     console.warn('[ground] failed:', (e as Error)?.message);

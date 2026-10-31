@@ -15,5 +15,7 @@ Back up the database first. Files `0002` onward are written to be re-runnable.
 | 0008_infographic_kind.sql | Adds the infographic kind (run after 0007) |
 | 0009_push_reminders.sql | Push subscriptions and reminder settings |
 | 0010_study_plans.sql | Study planner (one plan per learner per project) |
+| 0011_courses_updated_at.sql | Adds `updated_at` to `courses` and `course_progress`. Run it if saving a course module fails with `record "new" has no field "updated_at"` |
+| 0012_plans.sql | Plans, subscriptions and the admin audit log (prices and limits editable in /admin/plans) |
 
 `o.sql` was removed: every statement in it already exists in `0002_adaptive.sql`.

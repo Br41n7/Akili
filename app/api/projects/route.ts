@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { createProjectSchema, toProjectRow } from '@/lib/project-context';
+import { supabaseAdmin } from '@/lib/supabase/admin';
+import { loadUserPlan } from '@/lib/plans-db';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +27,15 @@ export async function POST(req: NextRequest) {
       fields[key] ||= issue.message;
     }
     return NextResponse.json({ error: Object.values(fields)[0] || 'Check the form and try again.', fields }, { status: 400 });
+  }
+
+  // How many projects the learner's plan allows (set by an admin; empty means no limit).
+  const { plan } = await loadUserPlan(supabaseAdmin, user.id);
+  if (plan.limits.max_projects !== null) {
+    const { count } = await supabase.from('projects').select('id', { count: 'exact', head: true }).eq('user_id', user.id);
+    if ((count ?? 0) >= plan.limits.max_projects) {
+      return NextResponse.json({ error: `Your ${plan.name} plan allows ${plan.limits.max_projects} projects. Delete one or upgrade to add more.`, code: 'PLAN_LIMIT' }, { status: 403 });
+    }
   }
 
   const { data, error } = await supabase.from('projects').insert(toProjectRow(parsed.data, user.id)).select().single();

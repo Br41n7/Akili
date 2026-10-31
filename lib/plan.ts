@@ -15,12 +15,12 @@ export type Feature = 'hourly_reminders' | 'cloud_tts' | 'image_generation' | 'v
 export const FEATURES: Feature[] = ['hourly_reminders', 'cloud_tts', 'image_generation', 'video_export', 'search_grounding', 'long_materials', 'deep_courses'];
 
 export interface Capabilities { plan: 'free' | 'pro'; has: (f: Feature) => boolean; limits: Limits }
-export interface Limits { dailyImageGenerations: number; dailyVisualPlans: number; /** How much of a learner's material a course may read (characters; about 1,800 per page). */ courseMaterialChars: number }
+export interface Limits { /** AI requests per day. */ dailyAi: number; /** Projects a learner may own; null = no limit. */ maxProjects: number | null; dailyImageGenerations: number; dailyVisualPlans: number; /** How much of a learner's material a course may read (characters; about 1,800 per page). */ courseMaterialChars: number }
 
 export const FREE_COURSE_CHARS = 30_000;
 export const PRO_COURSE_CHARS = 150_000;
-const FREE_LIMITS = { dailyImageGenerations: 0, dailyVisualPlans: 10 };
-const PRO_LIMITS = { dailyImageGenerations: 20, dailyVisualPlans: 100 };
+const FREE_LIMITS = { dailyAi: 20, maxProjects: 5 as number | null, dailyImageGenerations: 0, dailyVisualPlans: 10 };
+const PRO_LIMITS = { dailyAi: 200, maxProjects: null as number | null, dailyImageGenerations: 20, dailyVisualPlans: 100 };
 
 export function capabilities(env: Record<string, string | undefined> = process.env, userPlan?: string | null): Capabilities {
   const given = (userPlan || env.NEXT_PUBLIC_AKILI_PLAN || '').trim().toLowerCase();

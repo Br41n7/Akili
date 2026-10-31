@@ -64,3 +64,7 @@ How much of a learner's material a course may read depends on the plan (`lib/pla
 ## Why only course modules failed while flashcards and study guides worked (hypothesis, not confirmed)
 
 Lessons contain LaTeX formulas, whose backslashes are invalid inside JSON strings. Groq's strict JSON mode rejects such output with `json_validate_failed` (the `groq: bad_request 400` in the error line). Flashcards and study guides have no formulas, so they pass. Changes: the prompt now tells the model to double backslashes; on `json_validate_failed` the same model is asked again without strict JSON mode (our own parser and repair step check it); lessons are requested 2 at a time instead of 3 so Gemini is less likely to time out. If the error line still shows a different code after deploying, send it.
+
+## Save error: `record "new" has no field "updated_at"` (code 42703)
+
+The database has an updated_at trigger on `courses` but the table has no such column, so every update is refused (inserts still work, which is why the outline saved but no module could). Run `supabase/migrations/0011_courses_updated_at.sql` in the Supabase SQL editor. This may also be what broke saving lesson progress.

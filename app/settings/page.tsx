@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 import { ErrorState, Skeleton, Surface } from '@/components/ui';
 import PersonaPicker from '@/components/PersonaPicker';
 import ReminderSettings from '@/components/ReminderSettings';
+import PlanCard from '@/components/PlanCard';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -18,10 +19,10 @@ export default function SettingsPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/auth/login?redirect=%2Fsettings'); return; }
-      const { data, error } = await supabase.from('profiles').select('persona, reminders_enabled, reminder_hour').eq('id', user.id).maybeSingle();
+      const { data, error } = await supabase.from('profiles').select('persona, role, reminders_enabled, reminder_hour').eq('id', user.id).maybeSingle();
       // The reminder columns arrive with migration 0009; settings still open without them.
       if (error) {
-        const { data: basic, error: e2 } = await supabase.from('profiles').select('persona').eq('id', user.id).maybeSingle();
+        const { data: basic, error: e2 } = await supabase.from('profiles').select('persona, role').eq('id', user.id).maybeSingle();
         if (e2) throw e2; setProfile(basic || {});
       } else setProfile(data || {});
       setStatus('ready');
@@ -42,6 +43,8 @@ export default function SettingsPage() {
         {status === 'error' && <ErrorState message="Your settings did not load. Check your connection and try again." onRetry={load} />}
         {status === 'ready' && (
           <>
+            <PlanCard />
+            {profile?.role === 'admin' && <Link href="/admin/plans" className="block rounded-2xl border border-rule bg-paper p-4 text-sm font-bold">Admin: plans and prices</Link>}
             <Surface className="space-y-3 p-4">
               <div><h2 className="text-base font-bold">Tutor style</h2><p className="text-sm text-muted">How Akili talks to you in explanations, chat and feedback.</p></div>
               <PersonaPicker initial={profile?.persona} />
