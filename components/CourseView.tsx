@@ -1,6 +1,7 @@
 'use client';
 import { addLesson, saveCompletedLessons } from '@/lib/course-progress';
 import { capabilities } from '@/lib/plan';
+import { dbErrorNote, dbSafe } from '@/lib/text-safe';
 import CourseBuildForm from '@/components/CourseBuildForm';
 import {
   DEFAULT_OPTIONS, DEPTHS, cleanGoals, fillModule, isPending, modulePrompt, nextPendingIndex, outlineContext, outlineOf, outlinePrompt, pendingModules,
@@ -133,9 +134,9 @@ export default function CourseView({ projectId, userId, region, persona, userGro
       written.push(...data.lessons);
     }
     const latest = courseRef.current; // lesson visuals may have been saved meanwhile
-    const modules = fillModule(latest.modules, index, attachSources(written, research));
+    const modules = dbSafe(fillModule(latest.modules, index, attachSources(written, research)));
     const { error } = await supabase.from('courses').update({ modules }).eq('id', latest.id).eq('user_id', userId);
-    if (error) throw new Error('The module was written but could not be saved. Please try again.');
+    if (error) { console.error('[course] save failed', error.code, error.message); throw new Error(`The module was written but could not be saved. Please try again.${dbErrorNote(error)}`); }
     courseRef.current = { ...latest, modules }; setCourse(courseRef.current);
   };
 
@@ -168,7 +169,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
       const modules = pendingModules(outline, clean);
       const { data: saved, error } = await supabase.from('courses').insert({
         project_id: projectId, user_id: userId, title: outline.title, description: outline.description,
-        subject: project?.subject ?? null, exam_type: project?.exam_type ?? null, modules,
+        subject: project?.subject ?? null, exam_type: project?.exam_type ?? null, modules: dbSafe(modules),
       }).select().single();
       if (error || !saved) throw new Error('The outline was written but could not be saved. Please try again.');
       courseRef.current = saved; setCourse(saved); setProgress({ completed_lessons: [] }); setOpenModule(saved.modules[0]?.id ?? null); setActiveId(null);
@@ -195,8 +196,8 @@ export default function CourseView({ projectId, userId, region, persona, userGro
       const outline = await ai('course_outline', outlinePrompt(scope(), o, context, { modules: 1, lessonsPer: DEPTHS[opts.depth].lessonsPer }, existing));
       const fresh = pendingModules(outline, o, current.modules.length).slice(0, 1);
       const modules = [...current.modules, ...fresh];
-      const { error } = await supabase.from('courses').update({ modules }).eq('id', current.id).eq('user_id', userId);
-      if (error) throw new Error('Could not save the new module. Please try again.');
+      const { error } = await supabase.from('courses').update({ modules: dbSafe(modules) }).eq('id', current.id).eq('user_id', userId);
+      if (error) throw new Error(`Could not save the new module. Please try again.${dbErrorNote(error)}`);
       courseRef.current = { ...current, modules }; setCourse(courseRef.current); setOpenModule(fresh[0].id); setAddTopic('');
     } catch (err) { setGenError(errorMessage(err, 'Could not add a module. Please try again.')); busyRef.current = false; setBuildingIdx(null); return; }
     busyRef.current = false; setBuildingIdx(null);

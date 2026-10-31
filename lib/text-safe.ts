@@ -90,3 +90,30 @@ export function safeImageSrc(img: { mimeType?: unknown; base64?: unknown } | nul
   if (!img || !isSafeImageType(img.mimeType) || typeof img.base64 !== 'string' || !img.base64 || !B64.test(img.base64)) return '';
   return `data:${img.mimeType.toLowerCase()};base64,${img.base64}`;
 }
+
+/**
+ * Make model output safe to store in Postgres JSONB: no NUL characters (\u0000, which JSONB rejects) and no lone
+ * surrogate halves (which break JSON encoding). Everything else is kept exactly.
+ */
+export function dbSafe<T>(value: T): T {
+  const fix = (s: string) => {
+    let out = '';
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c === 0) continue;
+      if (c >= 0xd800 && c <= 0xdbff) { const n = s.charCodeAt(i + 1); if (n >= 0xdc00 && n <= 0xdfff) { out += s[i] + s[i + 1]; i++; } else out += '�'; continue; }
+      if (c >= 0xdc00 && c <= 0xdfff) { out += '�'; continue; }
+      out += s[i];
+    }
+    return out;
+  };
+  const walk = (v: unknown): unknown => typeof v === 'string' ? fix(v) : Array.isArray(v) ? v.map(walk) : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v as Record<string, unknown>).map(([k, x]) => [fix(k), walk(x)])) : v;
+  return walk(value) as T;
+}
+
+/** A short, safe description of a database error for the learner's message (code and a clipped message). */
+export function dbErrorNote(err: { code?: string; message?: string } | null | undefined): string {
+  if (!err) return '';
+  const msg = String(err.message || '').replace(/\s+/g, ' ').slice(0, 120);
+  return ` (database: ${[err.code, msg].filter(Boolean).join(' ')})`;
+}
