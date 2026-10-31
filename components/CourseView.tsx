@@ -1,6 +1,7 @@
 'use client';
 import { addLesson, saveCompletedLessons } from '@/lib/course-progress';
 import { usePlan } from '@/lib/use-plan';
+import LessonRating from '@/components/LessonRating';
 import { pagesOf } from '@/lib/course-builder';
 import { dbErrorNote, dbSafe } from '@/lib/text-safe';
 import CourseBuildForm from '@/components/CourseBuildForm';
@@ -378,6 +379,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
           <Button block variant={isDone ? 'quiet' : 'primary'} disabled={isDone} onClick={() => markComplete(active.id)}>
             <CheckCircle2 size={18} /> {isDone ? 'Lesson completed' : 'Mark as complete'}
           </Button>
+          {isDone && <LessonRating lessonId={active.id} page="/course" />}
           <div className="grid grid-cols-2 gap-2">
             <Button variant="quiet" disabled={!prev} onClick={() => prev && openLesson(prev.id)}><ArrowLeft size={16} /> Previous</Button>
             <Button variant="dark" disabled={!next} onClick={() => next && openLesson(next.id)}>Next <ArrowRight size={16} /></Button>

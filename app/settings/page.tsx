@@ -8,6 +8,7 @@ import { ErrorState, Skeleton, Surface } from '@/components/ui';
 import PersonaPicker from '@/components/PersonaPicker';
 import ReminderSettings from '@/components/ReminderSettings';
 import PlanCard from '@/components/PlanCard';
+import FeedbackForm from '@/components/FeedbackForm';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -44,7 +45,12 @@ export default function SettingsPage() {
         {status === 'ready' && (
           <>
             <PlanCard />
-            {profile?.role === 'admin' && <Link href="/admin/plans" className="block rounded-2xl border border-rule bg-paper p-4 text-sm font-bold">Admin: plans and prices</Link>}
+            {profile?.role === 'admin' && (
+              <div className="grid grid-cols-2 gap-2">
+                <Link href="/admin/plans" className="block rounded-2xl border border-rule bg-paper p-4 text-sm font-bold">Admin: plans and prices</Link>
+                <Link href="/admin/feedback" className="block rounded-2xl border border-rule bg-paper p-4 text-sm font-bold">Admin: feedback</Link>
+              </div>
+            )}
             <Surface className="space-y-3 p-4">
               <div><h2 className="text-base font-bold">Tutor style</h2><p className="text-sm text-muted">How Akili talks to you in explanations, chat and feedback.</p></div>
               <PersonaPicker initial={profile?.persona} />
@@ -53,6 +59,7 @@ export default function SettingsPage() {
               <h2 className="text-base font-bold">Study reminders</h2>
               <ReminderSettings enabled={!!profile?.reminders_enabled} hour={profile?.reminder_hour ?? 18} />
             </Surface>
+          <FeedbackForm />
           </>
         )}
       </main>
