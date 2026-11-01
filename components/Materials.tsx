@@ -5,6 +5,7 @@ import { FileText, Link2, Plus, StickyNote, Trash2, Upload, X } from 'lucide-rea
 import toast from 'react-hot-toast';
 import { errorMessage } from '@/lib/utils';
 import { ACCEPTED_TYPES, uploadDocument } from '@/lib/upload-document';
+import UploadHelp from '@/components/UploadHelp';
 import { Button, ConfirmDialog, EmptyState, ErrorState, ListSkeleton, Segmented, Surface, TextArea, TextInput, IconButton } from '@/components/ui';
 
 interface Props { projectId: string; userId: string }
@@ -21,6 +22,7 @@ export default function Materials({ projectId, userId }: Props) {
   const [importing, setImporting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ kind: 'doc' | 'note'; id: string; label: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
 
   const load = () => {
     setStatus('loading');
@@ -38,6 +40,7 @@ export default function Materials({ projectId, userId }: Props) {
   const uploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (fileRef.current) fileRef.current.value = '';
+    if (photoRef.current) photoRef.current.value = '';
     if (files.length === 0) return;
     setUploading(true);
     let added = 0;
@@ -111,6 +114,7 @@ export default function Materials({ projectId, userId }: Props) {
       {tab === 'docs' && status !== 'error' && (
         <div className="space-y-3">
           <Surface className="space-y-3 p-4">
+            <input ref={photoRef} type="file" accept="image/*" capture="environment" onChange={uploadFile} className="sr-only" aria-label="Take a photo of your notes" />
             <input ref={fileRef} type="file" multiple accept={ACCEPTED_TYPES} onChange={uploadFile} className="sr-only" aria-label="Choose PDF, Word, PPT, Image, or TXT files" />
             <Button variant="quiet" block loading={uploading} onClick={() => fileRef.current?.click()} className="min-h-24 flex-col gap-1.5 border-2 border-dashed">
               <Upload size={22} />
@@ -121,6 +125,7 @@ export default function Materials({ projectId, userId }: Props) {
               <TextInput value={importUrl} onChange={e => setImportUrl(e.target.value)} placeholder="Paste a Google Docs, Google Slides, or webpage link" onKeyDown={e => e.key === 'Enter' && importFromUrl()} />
               <Button loading={importing} disabled={!importUrl.trim()} onClick={importFromUrl}><Link2 size={16} /> Import</Button>
             </div>
+          <UploadHelp onPhoto={() => photoRef.current?.click()} onNotes={() => setTab('notes')} />
           </Surface>
 
           {status === 'loading' && <ListSkeleton rows={2} />}

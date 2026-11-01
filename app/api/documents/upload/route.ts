@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 30;
 
 const MAX_BYTES = 10 * 1024 * 1024;
-const ALLOWED_EXTENSIONS = ['pdf', 'txt', 'docx', 'doc', 'pptx', 'ppt', 'png', 'jpg', 'jpeg', 'webp'];
+import { ALLOWED_EXTENSIONS, extensionOf } from '@/lib/file-types';
 
 const fail = (error: string, status: number) => NextResponse.json({ error }, { status });
 
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
     const { data: project } = await supabase.from('projects').select('id').eq('id', projectId).eq('user_id', user.id).maybeSingle();
     if (!project) return fail('That project was not found.', 404);
 
-    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    const ext = extensionOf(file);
     if (!ALLOWED_EXTENSIONS.includes(ext)) {
       return fail('Unsupported file format. Please upload PDF, Word (.docx), PowerPoint (.pptx), TXT, or Image files.', 400);
     }

@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import { createProjectSchema, type EducationLevel, type ProjectRecord } from '@/lib/project-context';
 import { ACCEPTED_TYPES, checkFile, formatSize, uploadDocument } from '@/lib/upload-document';
+import UploadHelp from '@/components/UploadHelp';
 import { Button, ChoiceChips, Field, IconButton, TextInput } from '@/components/ui';
 import { errorMessage } from '@/lib/utils';
 
@@ -32,6 +33,7 @@ export default function NewProjectSheet({ open, onClose, onCreated }: Props) {
   const [progress, setProgress] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -49,6 +51,7 @@ export default function NewProjectSheet({ open, onClose, onCreated }: Props) {
   const addFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files || []);
     if (fileRef.current) fileRef.current.value = '';
+    if (photoRef.current) photoRef.current.value = '';
     const problems: string[] = [];
     const next = [...files];
     for (const f of picked) {
@@ -183,11 +186,14 @@ export default function NewProjectSheet({ open, onClose, onCreated }: Props) {
                 <span className="text-xs text-muted">Optional</span>
               </div>
 
+              <input ref={photoRef} type="file" accept="image/*" capture="environment" onChange={addFiles} className="sr-only" aria-label="Take a photo of your notes" />
               <input ref={fileRef} type="file" multiple accept={ACCEPTED_TYPES} onChange={addFiles} className="sr-only" aria-label="Choose PDF, Word, PPT, Image, or TXT files" />
               <Button type="button" variant="quiet" block disabled={submitting || files.length >= MAX_FILES_AT_CREATION} onClick={() => fileRef.current?.click()} className="min-h-16 flex-col gap-0.5 border-2 border-dashed">
                 <span className="inline-flex items-center gap-2"><Paperclip size={17} /> {files.length > 0 ? 'Add more files' : 'Choose files (PDF, Word, PPT, Image, TXT)'}</span>
                 <span className="text-xs font-normal text-muted">Up to 10MB each. You can also add materials after creating the project.</span>
               </Button>
+
+              <UploadHelp onPhoto={() => photoRef.current?.click()} />
 
               <Field label="Or import Google file / Web URL" htmlFor="np-url" optional>
                 <div className="flex gap-2">

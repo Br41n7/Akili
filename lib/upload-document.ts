@@ -1,12 +1,19 @@
 import { supabase } from '@/lib/supabase';
 
 export const MAX_FILE_BYTES = 10 * 1024 * 1024;
-export const ALLOWED_EXTENSIONS = ['pdf', 'txt', 'docx', 'doc', 'pptx', 'ppt', 'png', 'jpg', 'jpeg', 'webp'];
-export const ACCEPTED_TYPES = '.pdf,.txt,.docx,.doc,.pptx,.ppt,.png,.jpg,.jpeg,.webp';
+import { ALLOWED_EXTENSIONS, extensionOf, withExtension } from '@/lib/file-types';
+export { ALLOWED_EXTENSIONS, extensionOf, isInAppBrowser, withExtension } from '@/lib/file-types';
+// Extensions AND media types. Some phones and in-app browsers only offer a proper file picker when they are given media types.
+export const ACCEPTED_TYPES = [
+  '.pdf,.txt,.docx,.doc,.pptx,.ppt,.png,.jpg,.jpeg,.webp',
+  'application/pdf', 'text/plain', 'application/msword', 'application/vnd.ms-powerpoint',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'image/png', 'image/jpeg', 'image/webp',
+].join(',');
 
 /** Returns a message the learner can act on, or null when the file is fine. */
 export function checkFile(file: File): string | null {
-  const ext = file.name.split('.').pop()?.toLowerCase();
+  const ext = extensionOf(file);
   if (!ALLOWED_EXTENSIONS.includes(ext || '')) {
     return `${file.name} is not a supported file type (PDF, Word, PowerPoint, TXT, or Image).`;
   }
@@ -24,6 +31,7 @@ export function formatSize(bytes: number): string {
  * Throws an Error whose message is safe to show to the learner.
  */
 export async function uploadDocument(file: File, projectId: string, userId: string) {
+  file = withExtension(file);
   const problem = checkFile(file);
   if (problem) throw new Error(problem);
 
