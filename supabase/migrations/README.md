@@ -18,5 +18,6 @@ Back up the database first. Files `0002` onward are written to be re-runnable.
 | 0011_courses_updated_at.sql | Adds `updated_at` to `courses` and `course_progress`. Run it if saving a course module fails with `record "new" has no field "updated_at"` |
 | 0012_plans.sql | Plans, subscriptions and the admin audit log (prices and limits editable in /admin/plans) |
 | 0013_feedback.sql | Learner feedback and lesson ratings (read at /admin/feedback) |
+| 0014_custom_tutor_style_and_region.sql | Custom tutor style (Pro) and a global default country |
 
 `o.sql` was removed: every statement in it already exists in `0002_adaptive.sql`.

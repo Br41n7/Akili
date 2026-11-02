@@ -5,7 +5,7 @@ export const MNEMONIC_STYLES = [
   { value: 'acronym', label: 'Acronym' },
   { value: 'funny', label: 'Funny' },
   { value: 'academic', label: 'Academic' },
-  { value: 'african-themed', label: 'African' },
+  { value: 'african-themed', label: 'My region' }, // id kept so saved mnemonics still match
 ] as const;
 export type MnemonicStyle = (typeof MNEMONIC_STYLES)[number]['value'];
 
@@ -28,7 +28,7 @@ const GUIDE: Record<MnemonicStyle, string> = {
   acronym: 'A pronounceable acronym or a short sentence whose first letters give the items in order (for example PMAT). Every letter must be the first letter of the item it stands for.',
   funny: 'A silly, surprising line or image that sticks. Humour must help recall, not replace the facts.',
   academic: 'A clean, formal memory aid: a grouping, a pattern or a short rhyme that a lecturer could put on a slide.',
-  'african-themed': 'Use familiar West African images (markets, food, music, football, transport, proverbs) as the memory hooks. Keep it respectful and never stereotype.',
+  'african-themed': "Use familiar images from the learner's own region and everyday life (markets, food, music, sport, transport, sayings) as the memory hooks, using the region you were told about. If the region is unknown, use widely familiar everyday images. Keep it respectful and never stereotype.",
 };
 
 export function buildMnemonicPrompt(i: { concept: string; style: MnemonicStyle; items?: string[] }): string {

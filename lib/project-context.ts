@@ -36,7 +36,7 @@ export interface ProjectRecord {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const EDUCATION_LEVELS: { value: EducationLevel; label: string; hint: string }[] = [
-  { value: 'secondary', label: 'Secondary / O-Level', hint: 'WAEC, NECO, JAMB, KCSE and school exams' },
+  { value: 'secondary', label: 'Secondary / High school', hint: 'WAEC, A-Levels, IB, AP, SAT, KCSE and school exams' },
   { value: 'university', label: 'University', hint: 'A course, module or topic you are studying' },
 ];
 
@@ -44,15 +44,26 @@ export const EXAM_BOARDS: { value: string; label: string }[] = [
   { value: 'WAEC', label: 'WAEC (WASSCE)' },
   { value: 'NECO', label: 'NECO (SSCE)' },
   { value: 'JAMB', label: 'JAMB (UTME)' },
+  { value: 'KCSE', label: 'KCSE' },
   { value: 'GCE', label: 'GCE / O-Level' },
   { value: 'IGCSE', label: 'Cambridge IGCSE' },
-  { value: 'KCSE', label: 'KCSE' },
+  { value: 'GCSE', label: 'GCSE' },
+  { value: 'A-LEVEL', label: 'A-Level / AS-Level' },
+  { value: 'IB', label: 'IB (Diploma or MYP)' },
+  { value: 'AP', label: 'AP (Advanced Placement)' },
+  { value: 'SAT', label: 'SAT' },
+  { value: 'ACT', label: 'ACT' },
+  { value: 'CBSE', label: 'CBSE / ICSE (India)' },
+  { value: 'STATE', label: 'National or state curriculum' },
   { value: 'SCHOOL', label: 'School exam / not sure' },
 ];
 
 export const SECONDARY_CLASSES = [
   'JSS 1', 'JSS 2', 'JSS 3', 'SS 1', 'SS 2', 'SS 3',
-  'Form 1', 'Form 2', 'Form 3', 'Form 4', 'Resitting / private candidate',
+  'Form 1', 'Form 2', 'Form 3', 'Form 4',
+  'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12',
+  'Year 9', 'Year 10', 'Year 11', 'Year 12 (Lower Sixth)', 'Year 13 (Upper Sixth)',
+  'Class 10', 'Class 12', 'Resitting / private candidate',
 ];
 
 export const SECONDARY_SUBJECTS = [
@@ -60,7 +71,8 @@ export const SECONDARY_SUBJECTS = [
   'Economics', 'Government', 'Literature-in-English', 'Geography', 'History',
   'Christian Religious Studies', 'Islamic Studies', 'Agricultural Science', 'Commerce',
   'Financial Accounting', 'Civic Education', 'Computer Studies', 'Technical Drawing',
-  'Food and Nutrition', 'French', 'Yoruba', 'Igbo', 'Hausa',
+  'Food and Nutrition', 'French', 'Spanish', 'Computer Science', 'Business Studies', 'Psychology', 'Sociology', 'Statistics',
+  'Yoruba', 'Igbo', 'Hausa',
 ];
 
 export const UNIVERSITY_YEARS = [
@@ -102,7 +114,7 @@ export const secondaryProjectSchema = z.object({
   ...baseShape,
   education_level: z.literal('secondary'),
   subject: optionalText(80), // the subject, optional: the project name is used when it is empty
-  exam_board: z.enum(['WAEC', 'NECO', 'JAMB', 'GCE', 'IGCSE', 'KCSE', 'SCHOOL']).optional(),
+  exam_board: z.enum(EXAM_BOARDS.map(b => b.value) as [string, ...string[]]).optional(),
   class_level: optionalText(40),
 });
 
@@ -153,7 +165,7 @@ export function toProjectRow(input: CreateProjectInput, userId: string): Record<
 // Reading projects (including ones created before education_level existed)
 // ─────────────────────────────────────────────────────────────────────────────
 
-const SECONDARY_EXAM_TYPES = new Set(['WAEC', 'WASSCE', 'NECO', 'JAMB', 'UTME', 'POST-UTME', 'KCSE', 'BECE', 'GCE', 'IGCSE']);
+const SECONDARY_EXAM_TYPES = new Set(['WAEC', 'WASSCE', 'NECO', 'JAMB', 'UTME', 'POST-UTME', 'KCSE', 'BECE', 'GCE', 'IGCSE', 'GCSE', 'A-LEVEL', 'IB', 'AP', 'SAT', 'ACT', 'CBSE', 'ICSE', 'STATE']);
 
 export function levelOf(p: Pick<ProjectRecord, 'education_level' | 'exam_type'>): EducationLevel {
   if (p.education_level === 'secondary' || p.education_level === 'university') return p.education_level;
@@ -182,7 +194,7 @@ export function projectSubject(p: ProjectRecord): string {
 }
 
 export function levelLabel(p: ProjectRecord): string {
-  return levelOf(p) === 'secondary' ? 'Secondary / O-Level' : 'University';
+  return levelOf(p) === 'secondary' ? 'Secondary / High school' : 'University';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,7 +229,7 @@ export function buildProjectContext(p: ProjectRecord): string {
       details.length ? details.join('. ') + '.' : '',
       goal,
       'Teach at undergraduate level for their year: use correct technical terminology, explain reasoning and mechanisms, and build on prerequisite knowledge instead of restarting from secondary-school basics.',
-      'Do NOT frame content around WAEC, NECO, JAMB, KCSE or any secondary-school exam board, and do not use secondary-school mark schemes.',
+      'Do NOT frame content around WAEC, NECO, JAMB, KCSE, A-Levels, SAT, AP or any other secondary-school exam board, and do not use secondary-school mark schemes.',
       'When writing assessment questions, use the style of university tests: conceptual and applied multiple-choice, short-answer and problem-based questions that match the uploaded course material.',
       'Treat the learner\'s uploaded materials as the syllabus. If they do not cover something, say so instead of inventing course-specific details.',
     ].filter(Boolean).join('\n');
@@ -232,13 +244,13 @@ export function buildProjectContext(p: ProjectRecord): string {
   ].filter(Boolean);
 
   return [
-    'LEARNER LEVEL — SECONDARY / O-LEVEL',
+    'LEARNER LEVEL — SECONDARY / HIGH SCHOOL',
     `The learner is a secondary-school student working on the project "${p.name}".`,
     details.length ? details.join('. ') + '.' : '',
     goal,
     'Explain at secondary-school level: plain language, short steps, worked examples, and the units and terminology used in that syllabus. Do not assume university-level background.',
     boardKnown
-      ? `Follow the ${board} syllabus and question style: objective questions with four options (A–D) and theory questions with marking-scheme wording. Point out the exam technique that earns marks.`
+      ? `Follow the ${board} syllabus or specification and its question style: objective questions with four options (A–D) and theory questions with marking-scheme wording where that exam uses them. Point out the exam technique that earns marks.`
       : 'Follow the standard secondary-school syllabus for the subject, in the style of school examinations.',
     'Treat the learner\'s uploaded materials as the main source; add only widely taught syllabus content.',
   ].filter(Boolean).join('\n');

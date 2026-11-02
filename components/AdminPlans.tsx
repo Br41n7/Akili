@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 
 const FEATURE_LABELS: Record<Feature, string> = {
   hourly_reminders: 'Hourly reminders', cloud_tts: 'Cloud voice (TTS)', image_generation: 'Image generation', video_export: 'Video export',
-  search_grounding: 'Web research (search grounding)', long_materials: 'Long materials flag', deep_courses: 'Deep courses',
+  search_grounding: 'Web research (search grounding)', long_materials: 'Long materials flag', deep_courses: 'Deep courses', custom_tutor_style: 'Custom tutor style',
 };
 interface Sub { user_id: string; email: string; name: string; status: string; current_period_end: string | null }
 const naira = (kobo: number | null) => (kobo === null ? '' : String(kobo / 100));

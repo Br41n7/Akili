@@ -23,7 +23,7 @@ ${CTX(i.context)}
 First work out the most likely misconception, then explain it so a beginner can follow.
 - "likely_confusion": one or two sentences naming what is probably going wrong.
 - "simple_explanation": plain language, under 120 words, no jargon without a definition.
-- "analogy": one everyday picture from a Nigerian student's life. It must be accurate, not just cute.
+- "analogy": one everyday picture from the learner's own life and region (use the region you were told about; if unknown, a widely familiar everyday scene). It must be accurate, not just cute.
 - "steps": 3 to 5 small steps, each with a short title and text.
 - "check": one question they can answer to test themselves, with its answer.
 - "if_still_stuck": one specific thing to try next.

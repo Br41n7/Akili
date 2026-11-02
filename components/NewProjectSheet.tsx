@@ -18,7 +18,7 @@ interface Props {
 const MAX_FILES_AT_CREATION = 5;
 const LEVELS: { value: EducationLevel; label: string }[] = [
   { value: 'university', label: 'University' },
-  { value: 'secondary', label: 'Secondary / O-Level' },
+  { value: 'secondary', label: 'Secondary / High school' },
 ];
 
 export default function NewProjectSheet({ open, onClose, onCreated }: Props) {

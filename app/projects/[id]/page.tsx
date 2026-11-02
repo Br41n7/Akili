@@ -116,7 +116,7 @@ export default function ProjectPage() {
     );
   }
 
-  const region = profile?.region || 'Nigeria';
+  const region = profile?.region || 'Other';
   const persona = profile?.persona || 'friendly';
   const isPrimary = PRIMARY.includes(tab);
   const active = TABS.find(t => t.id === tab)!;

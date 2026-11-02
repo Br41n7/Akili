@@ -20,7 +20,7 @@ export default function SettingsPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push('/auth/login?redirect=%2Fsettings'); return; }
-      const { data, error } = await supabase.from('profiles').select('persona, role, reminders_enabled, reminder_hour').eq('id', user.id).maybeSingle();
+      const { data, error } = await supabase.from('profiles').select('persona, role, custom_tutor_style, reminders_enabled, reminder_hour').eq('id', user.id).maybeSingle();
       // The reminder columns arrive with migration 0009; settings still open without them.
       if (error) {
         const { data: basic, error: e2 } = await supabase.from('profiles').select('persona, role').eq('id', user.id).maybeSingle();
@@ -53,7 +53,7 @@ export default function SettingsPage() {
             )}
             <Surface className="space-y-3 p-4">
               <div><h2 className="text-base font-bold">Tutor style</h2><p className="text-sm text-muted">How Akili talks to you in explanations, chat and feedback.</p></div>
-              <PersonaPicker initial={profile?.persona} />
+              <PersonaPicker initial={profile?.persona} initialStyle={profile?.custom_tutor_style} />
             </Surface>
             <Surface className="space-y-3 p-4">
               <h2 className="text-base font-bold">Study reminders</h2>

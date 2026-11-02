@@ -14,6 +14,15 @@ const REGION_DEFAULTS: Record<string, CulturalContext> = {
   Kenya: { country: 'Kenya', foods: ['maize dishes', 'ugali-style meals', 'beans dishes', 'stews', 'rice dishes'], transport: ['matatu', 'boda boda', 'bus', 'train'], objects: ['shilling', 'market', 'home', 'water tank'], exams: ['KCSE', 'KCPE'], forbidden: [] },
   'South Africa': { country: 'South Africa', foods: ['maize dishes', 'stews', 'braai foods', 'bread-based meals'], transport: ['minibus taxi', 'bus', 'train'], objects: ['rand', 'township/market', 'home', 'water container'], exams: ['NSC Matric', 'IEB'], forbidden: [] },
   India: { country: 'India', foods: ['rice dishes', 'roti', 'dal', 'vegetable curries', 'regional snacks'], transport: ['auto rickshaw', 'bus', 'metro', 'train'], objects: ['rupee', 'market', 'home', 'pressure cooker'], exams: ['CBSE', 'ICSE', 'JEE', 'NEET', 'Board exams'], forbidden: [] },
+  Uganda: { country: 'Uganda', foods: ['matooke', 'posho', 'beans dishes', 'stews'], transport: ['boda boda', 'taxi (matatu-style minibus)', 'bus'], objects: ['shilling', 'market', 'home', 'water container'], exams: ['UCE', 'UACE'], forbidden: [] },
+  Tanzania: { country: 'Tanzania', foods: ['ugali', 'rice dishes', 'beans dishes', 'stews'], transport: ['daladala', 'bodaboda', 'bus', 'ferry'], objects: ['shilling', 'market', 'home', 'water container'], exams: ['CSEE', 'ACSEE'], forbidden: [] },
+  Egypt: { country: 'Egypt', foods: ['bread-based meals', 'rice dishes', 'beans dishes', 'stews'], transport: ['metro', 'microbus', 'bus', 'train'], objects: ['pound', 'market', 'home'], exams: ['Thanaweya Amma'], forbidden: [] },
+  Pakistan: { country: 'Pakistan', foods: ['rice dishes', 'roti', 'dal', 'curries'], transport: ['rickshaw', 'bus', 'motorcycle', 'train'], objects: ['rupee', 'market', 'home'], exams: ['Matric', 'FSc', 'MDCAT'], forbidden: [] },
+  Bangladesh: { country: 'Bangladesh', foods: ['rice dishes', 'dal', 'fish dishes', 'curries'], transport: ['rickshaw', 'bus', 'launch (boat)', 'train'], objects: ['taka', 'market', 'home'], exams: ['SSC', 'HSC'], forbidden: [] },
+  'United Kingdom': { country: 'the United Kingdom', foods: ['sandwiches', 'roast dinners', 'pasta dishes', 'curries'], transport: ['bus', 'train', 'underground', 'bicycle'], objects: ['pound', 'high street shop', 'home'], exams: ['GCSE', 'A-Level'], forbidden: [] },
+  'United States': { country: 'the United States', foods: ['sandwiches', 'pasta dishes', 'cereal', 'pizza'], transport: ['car', 'school bus', 'subway', 'bicycle'], objects: ['dollar', 'store', 'home'], exams: ['SAT', 'ACT', 'AP'], forbidden: [] },
+  Canada: { country: 'Canada', foods: ['sandwiches', 'pasta dishes', 'cereal', 'soups'], transport: ['car', 'school bus', 'subway', 'bicycle'], objects: ['dollar', 'store', 'home'], exams: ['provincial exams', 'AP', 'IB'], forbidden: [] },
+  Australia: { country: 'Australia', foods: ['sandwiches', 'pasta dishes', 'barbecue', 'cereal'], transport: ['car', 'bus', 'train', 'bicycle'], objects: ['dollar', 'shop', 'home'], exams: ['HSC', 'VCE', 'ATAR'], forbidden: [] },
   Other: { country: 'the learner’s region', foods: [], transport: [], objects: [], exams: [], forbidden: [] },
 };
 
@@ -46,3 +55,6 @@ Avoid forcing unfamiliar foreign cultural references when a neutral or locally f
 Never assume that one food, dialect, school system, or cultural practice represents everyone in the region.
 `.trim();
 }
+
+/** Countries offered at signup and in settings. "Other" always works: the tutor then uses neutral, widely familiar examples. */
+export const REGION_OPTIONS: string[] = [...Object.keys(REGION_DEFAULTS).filter(r => r !== 'Other').sort((a, b) => a.localeCompare(b)), 'Other'];

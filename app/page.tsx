@@ -36,7 +36,7 @@ function SampleQuestion() {
     <div className="rounded-3xl border border-rule bg-paper p-4 shadow-[0_2px_0_0_#DCE0E9] sm:p-6">
       <div className="mb-3 flex flex-wrap items-center gap-1.5">
         <Chip tone="marker">Secondary</Chip>
-        <Chip>WAEC Biology</Chip>
+        <Chip>Biology</Chip>
       </div>
       <p className="font-read text-[1.1875rem] leading-snug text-ink">{SAMPLE.stem}</p>
 
@@ -125,7 +125,7 @@ export default function Home() {
               Study from your own notes, not someone else’s.
             </h1>
             <p className="mt-5 max-w-lg text-lg leading-relaxed text-muted">
-              Add your PDFs and class notes. Akili builds lessons, quizzes and timed mock exams for WAEC, NECO, JAMB, KCSE or your university course.
+              Add your PDFs and class notes. Akili builds lessons, quizzes and timed mock exams for your school exams (WAEC, A-Levels, IB, AP, SAT, KCSE and more) or your university course.
             </p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Link href="/auth/signup" className={cn(buttonClasses('primary'), 'sm:px-7')}>
@@ -179,7 +179,7 @@ export default function Home() {
           <div className="mt-8 grid gap-4 md:grid-cols-2">
             <div className="rounded-3xl bg-marker-wash p-6 sm:p-8">
               <School size={26} className="text-ink" aria-hidden="true" />
-              <h3 className="mt-4 text-xl font-bold">Secondary and O-Level</h3>
+              <h3 className="mt-4 text-xl font-bold">High school and secondary</h3>
               <p className="mt-2 font-read text-[1.0625rem] leading-relaxed text-ink-soft">
                 Plain language, worked examples and objective questions with options A to D, in the style of your exam board.
               </p>

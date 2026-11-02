@@ -11,8 +11,8 @@
  * The variables are NEXT_PUBLIC_ so the browser and the server always agree. Neither holds a secret.
  * A flag only says a feature is allowed; the provider keys it needs are still separate server secrets.
  */
-export type Feature = 'hourly_reminders' | 'cloud_tts' | 'image_generation' | 'video_export' | 'search_grounding' | 'long_materials' | 'deep_courses';
-export const FEATURES: Feature[] = ['hourly_reminders', 'cloud_tts', 'image_generation', 'video_export', 'search_grounding', 'long_materials', 'deep_courses'];
+export type Feature = 'hourly_reminders' | 'cloud_tts' | 'image_generation' | 'video_export' | 'search_grounding' | 'long_materials' | 'deep_courses' | 'custom_tutor_style';
+export const FEATURES: Feature[] = ['hourly_reminders', 'cloud_tts', 'image_generation', 'video_export', 'search_grounding', 'long_materials', 'deep_courses', 'custom_tutor_style'];
 
 export interface Capabilities { plan: 'free' | 'pro'; has: (f: Feature) => boolean; limits: Limits }
 export interface Limits { /** AI requests per day. */ dailyAi: number; /** Projects a learner may own; null = no limit. */ maxProjects: number | null; dailyImageGenerations: number; dailyVisualPlans: number; /** How much of a learner's material a course may read (characters; about 1,800 per page). */ courseMaterialChars: number }

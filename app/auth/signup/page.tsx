@@ -6,13 +6,13 @@ import { supabase } from '@/lib/supabase';
 import { GraduationCap, Eye, EyeOff, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-const REGIONS = ['Nigeria', 'Ghana', 'Kenya', 'South Africa', 'India', 'Other'];
+import { REGION_OPTIONS as REGIONS } from '@/lib/cultural';
 
 function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [form, setForm] = useState({
-    full_name: '', email: '', password: '', region: 'Nigeria',
+    full_name: '', email: '', password: '', region: 'Other',
     // Pre-fill bank context if coming from PastQ import
     bank_id: searchParams.get('bank') || '',
     ref: searchParams.get('ref') || '',

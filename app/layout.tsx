@@ -10,8 +10,8 @@ const ui = Bricolage_Grotesque({ subsets: ['latin', 'latin-ext'], variable: '--f
 const read = Source_Serif_4({ subsets: ['latin', 'latin-ext'], variable: '--font-read', display: 'swap' });
 
 export const metadata: Metadata = {
-  title: 'Akili — AI study copilot for African students',
-  description: 'Upload your notes or import past questions. Akili builds lessons, quizzes and mock exams for your level.',
+  title: 'Akili — AI study copilot for students',
+  description: 'Upload your notes or import past questions. Akili builds lessons, quizzes and mock exams for your level, wherever you study.',
   applicationName: 'Akili',
   appleWebApp: { capable: true, title: 'Akili', statusBarStyle: 'default' },
   formatDetection: { telephone: false },

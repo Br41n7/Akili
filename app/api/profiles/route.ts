@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { isChoosablePersona } from '@/lib/personas';
+import { CUSTOM_PERSONA_ID, cleanCustomStyle, isChoosablePersona } from '@/lib/personas';
+import { loadUserPlan, planCapabilities } from '@/lib/plans-db';
+import { REGION_OPTIONS } from '@/lib/cultural';
 import { parseReminderSettings } from '@/lib/reminders';
 
 export async function GET() {
@@ -25,11 +27,23 @@ export async function PUT(req: NextRequest) {
 
   let body: Record<string, unknown>;
   try { body = await req.json(); } catch { return NextResponse.json({ error: 'That request could not be read.' }, { status: 400 }); }
-  const allowed = ['region', 'persona', 'custom_agent_prompt', 'preferred_model'];
+  const allowed = ['region', 'persona'];
   const update: Record<string, unknown> = Object.fromEntries(Object.entries(body).filter(([k]) => allowed.includes(k)));
 
   // A tutor style must be one that exists; reminder settings are checked field by field.
-  if ('persona' in update && !isChoosablePersona(update.persona)) return NextResponse.json({ error: 'That tutor style does not exist.' }, { status: 400 });
+  if ('region' in update && !(typeof update.region === 'string' && REGION_OPTIONS.includes(update.region))) return NextResponse.json({ error: 'Choose a country from the list.' }, { status: 400 });
+
+  // Your own tutor style is part of the Pro plan: saved only when the plan includes it, checked here on the server.
+  const wantsCustom = update.persona === CUSTOM_PERSONA_ID || (body.custom_tutor_style !== undefined && body.custom_tutor_style !== null && body.custom_tutor_style !== '');
+  if (wantsCustom) {
+    const { plan } = await loadUserPlan(supabaseAdmin, user.id);
+    if (!planCapabilities(plan).has('custom_tutor_style')) return NextResponse.json({ error: 'A custom tutor style is part of the Pro plan.', code: 'PLAN_REQUIRED' }, { status: 403 });
+  }
+  if ('custom_tutor_style' in body) {
+    if (body.custom_tutor_style === null || body.custom_tutor_style === '') update.custom_tutor_style = null; // clearing is always allowed
+    else { const c = cleanCustomStyle(body.custom_tutor_style); if (!c.ok) return NextResponse.json({ error: c.error }, { status: 400 }); update.custom_tutor_style = c.value; }
+  }
+  if ('persona' in update && update.persona !== CUSTOM_PERSONA_ID && !isChoosablePersona(update.persona)) return NextResponse.json({ error: 'That tutor style does not exist.' }, { status: 400 });
   const reminders = parseReminderSettings(body);
   if (!reminders.ok) return NextResponse.json({ error: reminders.error }, { status: 400 });
   Object.assign(update, reminders.value);

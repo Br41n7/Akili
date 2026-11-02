@@ -6,7 +6,8 @@ import { runAIDetailed, runAIJSON, toPublicError, AIServiceError } from '@/lib/a
 import { getValidator, VALIDATION_TYPES } from '@/lib/ai-schemas';
 import { getTask, isKnownTask, PERSONA_IDS } from '@/lib/ai-tasks';
 import { planQuota, recordUsage } from '@/lib/ai-quota';
-import { loadUserPlan } from '@/lib/plans-db';
+import { loadUserPlan, planCapabilities } from '@/lib/plans-db';
+import { CUSTOM_PERSONA_ID, customStyleInstruction } from '@/lib/personas';
 import { buildCulturalBlock } from '@/lib/cultural';
 import { buildProjectContext, type ProjectRecord } from '@/lib/project-context';
 
@@ -77,6 +78,7 @@ export async function POST(req: NextRequest) {
     if (spec.input === 'image' && !image) return fail('Please attach an image.', 400, 'IMAGE_REQUIRED');
 
     // Personas are a fixed list. Anything else is treated as the default, never pasted into the prompt.
+    const wantsCustom = personaInput === CUSTOM_PERSONA_ID;
     const persona = (PERSONA_IDS as readonly string[]).includes(personaInput) ? personaInput : 'friendly';
     const validationType = requestedValidation && VALIDATION_TYPES.includes(requestedValidation) ? requestedValidation : spec.validation;
 
@@ -103,10 +105,12 @@ export async function POST(req: NextRequest) {
     }
 
     const { data: profile } = await supabaseAdmin
-      .from('profiles').select('region_context').eq('id', user.id).maybeSingle();
+      .from('profiles').select('region_context, custom_tutor_style').eq('id', user.id).maybeSingle();
+    // A custom style is used only while the learner's plan includes it; the text is read from the database, never from the request.
+    const customStyle = wantsCustom && planCapabilities(userPlan.plan).has('custom_tutor_style') ? String((profile as any)?.custom_tutor_style || '').slice(0, 300) : '';
 
     const system = [
-      PERSONAS[persona] || persona,
+      customStyle ? customStyleInstruction(customStyle) : (PERSONAS[persona] || persona),
       projectBlock,
       buildCulturalBlock(region, (profile as any)?.region_context || {}),
       systemInstruction,

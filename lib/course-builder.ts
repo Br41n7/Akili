@@ -144,7 +144,7 @@ export const depthAllowed = (depth: Depth, deepCourses: boolean) => depth !== 'd
 
 // ── Prompts ──────────────────────────────────────────────────────────────────
 const scopeBlock = (s: LearnerScope) => `Learner level and scope:
-- Education level: ${s.secondary ? 'Secondary / O-Level' : 'University / college'}.
+- Education level: ${s.secondary ? 'Secondary / High school' : 'University / college'}.
 - Class/year: ${s.classLevel || 'not specified'}.
 - Subject/course: ${s.topic}.
 - Adapt vocabulary, examples and question difficulty to this level. A secondary-school learner must not receive university-level questions or terminology unless the materials require it.
