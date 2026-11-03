@@ -7,7 +7,7 @@ import { dbErrorNote, dbSafe } from '@/lib/text-safe';
 import CourseBuildForm from '@/components/CourseBuildForm';
 import {
   DEFAULT_OPTIONS, DEPTHS, cleanGoals, fillModule, isPending, modulePrompt, nextPendingIndex, outlineContext, outlineOf, outlinePrompt, pendingModules,
-  applyBudget, coverageNotice, depthAllowed, attachSources, balancedChunks, groundingRequest, retryTransient, selectContext, sizeFor, totalChars, type BuildOptions, type LearnerScope, type Research, type Source,
+  applyBudget, coverageNotice, documentText, depthAllowed, attachSources, balancedChunks, groundingRequest, retryTransient, selectContext, sizeFor, totalChars, type BuildOptions, type LearnerScope, type Research, type Source,
 } from '@/lib/course-builder';
 import LessonExtras from '@/components/LessonExtras';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -92,11 +92,11 @@ export default function CourseView({ projectId, userId, region, persona, userGro
   /** Every material the learner has, with ids. Selection and the plan's reading limit are applied by `usable`. */
   const loadSources = async (): Promise<Source[]> => {
     const [{ data: docs }, { data: notes }] = await Promise.all([
-      supabase.from('documents').select('content, name').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(20),
+      supabase.from('documents').select('content, chunks, name').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(20),
       supabase.from('notes').select('content, title').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(30),
     ]);
     return [
-      ...(docs || []).map((d: any, i: number) => ({ id: `d${i}:${d.name || ''}`, name: d.name || 'Document', content: d.content || '' })),
+      ...(docs || []).map((d: any, i: number) => ({ id: `d${i}:${d.name || ''}`, name: d.name || 'Document', content: documentText(d) })),
       ...(notes || []).map((n: any, i: number) => ({ id: `n${i}:${n.title || ''}`, name: n.title || 'Student note', content: n.content || '' })),
     ].filter(x => x.content.trim());
   };

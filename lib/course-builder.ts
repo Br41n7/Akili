@@ -96,6 +96,17 @@ export function selectContext(sources: Source[], query: string, budget = MODULE_
 }
 
 export const totalChars = (sources: Source[]) => sources.reduce((n, s) => n + (s.content?.length || 0), 0);
+/**
+ * The text of a stored document. `content` is only the first 12,000 characters (about 7 pages); `chunks` holds the whole
+ * text. A course should read the whole text, so a 100-page PDF counts as 100 pages, not 7. Capped per document so one huge
+ * file cannot flood a phone's memory.
+ */
+export const MAX_DOC_CHARS = 200_000;
+export function documentText(doc: { content?: string | null; chunks?: unknown }): string {
+  const parts = Array.isArray(doc.chunks) ? (doc.chunks as unknown[]).filter((c): c is string => typeof c === 'string' && c.trim().length > 0) : [];
+  const whole = parts.length ? parts.join('\n\n') : doc.content || '';
+  return whole.length > MAX_DOC_CHARS ? whole.slice(0, MAX_DOC_CHARS) : whole;
+}
 export const pagesOf = (chars: number) => (chars <= 0 ? 0 : Math.max(1, Math.round(chars / CHARS_PER_PAGE)));
 
 // ── How much of the learner's material a plan may read ───────────────────────

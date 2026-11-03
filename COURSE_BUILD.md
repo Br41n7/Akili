@@ -68,3 +68,6 @@ Lessons contain LaTeX formulas, whose backslashes are invalid inside JSON string
 ## Save error: `record "new" has no field "updated_at"` (code 42703)
 
 The database has an updated_at trigger on `courses` but the table has no such column, so every update is refused (inserts still work, which is why the outline saved but no module could). Run `supabase/migrations/0011_courses_updated_at.sql` in the Supabase SQL editor. This may also be what broke saving lesson progress.
+
+## Correction: courses now read the whole document (not the first ~7 pages)
+Uploads store a 12,000-character preview in `documents.content` and the whole text in `documents.chunks`. The course builder used only `content`, so a 100-page PDF contributed about 7 pages whatever the plan limit said. It now reads `chunks` (via `documentText`, capped at 200,000 characters per file), so the page counts shown in the materials list and the Free/Pro limits are true. Quiz, exam, study-tool and Ask AI still read only the preview; widening those is a separate change.
