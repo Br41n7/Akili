@@ -1,7 +1,9 @@
 import { supabase } from '@/lib/supabase';
 
-export const MAX_FILE_BYTES = 10 * 1024 * 1024;
+/** Hard ceiling in the browser. The learner's plan sets the real limit on the server (Free 10 MB, Pro 25 MB by default). */
+export const MAX_FILE_BYTES = 50 * 1024 * 1024;
 import { ALLOWED_EXTENSIONS, extensionOf, withExtension } from '@/lib/file-types';
+import { needsDirectUpload } from '@/lib/large-upload';
 export { ALLOWED_EXTENSIONS, extensionOf, isInAppBrowser, withExtension } from '@/lib/file-types';
 // Extensions AND media types. Some phones and in-app browsers only offer a proper file picker when they are given media types.
 export const ACCEPTED_TYPES = [
@@ -18,7 +20,7 @@ export function checkFile(file: File): string | null {
     return `${file.name} is not a supported file type (PDF, Word, PowerPoint, TXT, or Image).`;
   }
   if (file.size === 0) return `${file.name} is empty.`;
-  if (file.size > MAX_FILE_BYTES) return `${file.name} is larger than 10MB.`;
+  if (file.size > MAX_FILE_BYTES) return `${file.name} is too large (50 MB is the most any plan allows).`;
   return null;
 }
 
@@ -35,15 +37,24 @@ export async function uploadDocument(file: File, projectId: string, userId: stri
   const problem = checkFile(file);
   if (problem) throw new Error(problem);
 
-  const form = new FormData();
-  form.append('file', file);
-  form.append('project_id', projectId);
-
   let res: Response;
   try {
-    res = await fetch('/api/documents/upload', { method: 'POST', body: form });
-  } catch {
-    throw new Error('You seem to be offline. Check your connection and try again.');
+    if (needsDirectUpload(file.size)) {
+      // Big file: it cannot go through the app server (Vercel allows 4.5 MB per request), so it goes straight to Storage first.
+      const start = await fetch('/api/documents/upload/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: projectId, name: file.name, size: file.size }) });
+      const grant = await start.json().catch(() => null);
+      if (!start.ok || !grant?.token) throw new Error(grant?.error || 'Could not start that upload. Please try again.');
+      const { error: putError } = await supabase.storage.from(grant.bucket).uploadToSignedUrl(grant.path, grant.token, file, { contentType: file.type || undefined });
+      if (putError) throw new Error('The file could not be sent. Check your connection and try again.');
+      res = await fetch('/api/documents/upload', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ project_id: projectId, storage_path: grant.path, name: file.name }) });
+    } else {
+      const form = new FormData();
+      form.append('file', file);
+      form.append('project_id', projectId);
+      res = await fetch('/api/documents/upload', { method: 'POST', body: form });
+    }
+  } catch (e: any) {
+    throw new Error(e?.message && !/fetch|network/i.test(e.message) ? e.message : 'You seem to be offline. Check your connection and try again.');
   }
   const data = await res.json().catch(() => null);
   if (!res.ok || !data) throw new Error(data?.error || 'That file could not be processed.');

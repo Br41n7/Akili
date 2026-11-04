@@ -6,12 +6,14 @@ import toast from 'react-hot-toast';
 import { errorMessage } from '@/lib/utils';
 import { ACCEPTED_TYPES, uploadDocument } from '@/lib/upload-document';
 import UploadHelp from '@/components/UploadHelp';
+import { usePlan } from '@/lib/use-plan';
 import { Button, ConfirmDialog, EmptyState, ErrorState, ListSkeleton, Segmented, Surface, TextArea, TextInput, IconButton } from '@/components/ui';
 
 interface Props { projectId: string; userId: string }
 type Tab = 'docs' | 'notes';
 
 export default function Materials({ projectId, userId }: Props) {
+  const { caps } = usePlan();
   const [tab, setTab] = useState<Tab>('docs');
   const [docs, setDocs] = useState<any[]>([]);
   const [notes, setNotes] = useState<any[]>([]);
@@ -119,7 +121,7 @@ export default function Materials({ projectId, userId }: Props) {
             <Button variant="quiet" block loading={uploading} onClick={() => fileRef.current?.click()} className="min-h-24 flex-col gap-1.5 border-2 border-dashed">
               <Upload size={22} />
               <span>{uploading ? 'Processing…' : 'Upload PDF, Word, PPT, Image, or TXT files'}</span>
-              <span className="text-xs font-normal text-muted">Max 10MB per file</span>
+              <span className="text-xs font-normal text-muted">Up to {caps.limits.maxFileMb} MB per file</span>
             </Button>
             <div className="flex gap-2">
               <TextInput value={importUrl} onChange={e => setImportUrl(e.target.value)} placeholder="Paste a Google Docs, Google Slides, or webpage link" onKeyDown={e => e.key === 'Enter' && importFromUrl()} />

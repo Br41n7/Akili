@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { supabase } from '@/lib/supabase';
 import { createProjectSchema, type EducationLevel, type ProjectRecord } from '@/lib/project-context';
 import { ACCEPTED_TYPES, checkFile, formatSize, uploadDocument } from '@/lib/upload-document';
+import { usePlan } from '@/lib/use-plan';
 import UploadHelp from '@/components/UploadHelp';
 import { Button, ChoiceChips, Field, IconButton, TextInput } from '@/components/ui';
 import { errorMessage } from '@/lib/utils';
@@ -22,6 +23,7 @@ const LEVELS: { value: EducationLevel; label: string }[] = [
 ];
 
 export default function NewProjectSheet({ open, onClose, onCreated }: Props) {
+  const { caps } = usePlan();
   const [level, setLevel] = useState<EducationLevel>('university');
   const [name, setName] = useState('');
   const [course, setCourse] = useState('');
@@ -190,7 +192,7 @@ export default function NewProjectSheet({ open, onClose, onCreated }: Props) {
               <input ref={fileRef} type="file" multiple accept={ACCEPTED_TYPES} onChange={addFiles} className="sr-only" aria-label="Choose PDF, Word, PPT, Image, or TXT files" />
               <Button type="button" variant="quiet" block disabled={submitting || files.length >= MAX_FILES_AT_CREATION} onClick={() => fileRef.current?.click()} className="min-h-16 flex-col gap-0.5 border-2 border-dashed">
                 <span className="inline-flex items-center gap-2"><Paperclip size={17} /> {files.length > 0 ? 'Add more files' : 'Choose files (PDF, Word, PPT, Image, TXT)'}</span>
-                <span className="text-xs font-normal text-muted">Up to 10MB each. You can also add materials after creating the project.</span>
+                <span className="text-xs font-normal text-muted">Up to {caps.limits.maxFileMb} MB each. You can also add materials after creating the project.</span>
               </Button>
 
               <UploadHelp onPhoto={() => photoRef.current?.click()} />

@@ -27,6 +27,7 @@ function PlanEditor({ plan, onSaved }: { plan: PlanRow; onSaved: (p: PlanRow) =>
   const [projects, setProjects] = useState(plan.limits.max_projects === null ? '' : String(plan.limits.max_projects));
   const [images, setImages] = useState(String(plan.limits.daily_image_generations));
   const [figures, setFigures] = useState(String(plan.limits.max_figures));
+  const [fileMb, setFileMb] = useState(String(plan.limits.max_file_mb));
   const [features, setFeatures] = useState<Feature[]>(plan.features);
   const [busy, setBusy] = useState(false);
   const free = plan.id === 'free';
@@ -37,7 +38,7 @@ function PlanEditor({ plan, onSaved }: { plan: PlanRow; onSaved: (p: PlanRow) =>
     if (!free && priceKobo !== null && !Number.isFinite(priceKobo)) return toast.error('Enter the price as a number, in naira.');
     const body = {
       id: plan.id, name, ...(free ? {} : { price_kobo: priceKobo, active, features }),
-      limits: { daily_ai: n(dailyAi), course_material_chars: Math.round(n(pages) * 1800), max_projects: projects.trim() === '' ? null : n(projects), max_figures: n(figures), daily_image_generations: n(images) },
+      limits: { daily_ai: n(dailyAi), course_material_chars: Math.round(n(pages) * 1800), max_projects: projects.trim() === '' ? null : n(projects), max_figures: n(figures), max_file_mb: n(fileMb), daily_image_generations: n(images) },
     };
     setBusy(true);
     try { const j = await api('/api/admin/plans', 'PUT', body); resetPlanCache(); onSaved(j.plan); toast.success(`${j.plan.name} plan saved.`); }
@@ -53,6 +54,7 @@ function PlanEditor({ plan, onSaved }: { plan: PlanRow; onSaved: (p: PlanRow) =>
         <Field label="Material pages per course" htmlFor={`${plan.id}-pages`} hint="About 1,800 characters a page."><TextInput id={`${plan.id}-pages`} inputMode="numeric" value={pages} onChange={e => setPages(e.target.value)} /></Field>
         <Field label="Max projects" htmlFor={`${plan.id}-proj`} hint="Empty = no limit."><TextInput id={`${plan.id}-proj`} inputMode="numeric" value={projects} onChange={e => setProjects(e.target.value)} placeholder="No limit" /></Field>
         <Field label="Saved figures (per learner)" htmlFor={`${plan.id}-fig`} hint="Pictures kept from their materials."><TextInput id={`${plan.id}-fig`} inputMode="numeric" value={figures} onChange={e => setFigures(e.target.value)} /></Field>
+        <Field label="Largest file (MB)" htmlFor={`${plan.id}-mb`} hint="One uploaded file. Up to 50."><TextInput id={`${plan.id}-mb`} inputMode="numeric" value={fileMb} onChange={e => setFileMb(e.target.value)} /></Field>
         <Field label="Image generations per day" htmlFor={`${plan.id}-img`}><TextInput id={`${plan.id}-img`} inputMode="numeric" value={images} onChange={e => setImages(e.target.value)} /></Field>
       </div>
       {!free && (
