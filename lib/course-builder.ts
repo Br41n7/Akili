@@ -181,6 +181,8 @@ ${scopeBlock(scope)}
 ${goalsBlock(opts.goals)}
 ${policyBlock(opts.beyondNotes)}
 
+Cover the whole of the materials: every chapter, section and page range must belong to some lesson, in the order the materials present them. Do not leave parts out to keep the course short. The materials mark pages like "[Page 12]"; where they do, put the pages a lesson covers in its objective, like "(pages 12-15)".
+
 Return ONLY the outline: exactly ${size.modules} module${size.modules === 1 ? '' : 's'}, each with about ${size.lessonsPer} lessons, in a sensible teaching order. Titles must be specific and different from each other. No lesson content yet.
 JSON: {"title": string, "description": string, "estimated_duration": string,
  "modules": [{"title": string, "summary": string, "lessons": [{"title": string, "objective": string}]}]}`;
@@ -207,11 +209,14 @@ ${goalsBlock(opts.goals)}
 ${policyBlock(opts.beyondNotes)}${researchBlock}
 
 Requirements for each lesson:
-- Learning objectives, ${scope.secondary ? 'a clear explanation of about 150-250 words' : 'a thorough explanation of about 250-350 words'} in markdown, key concepts, one worked example, common mistakes, and 3 practice questions.
+- Teach it the way a patient tutor would. Start from what the learner already knows, use plain words, and define every technical term the first time it appears. ${scope.secondary ? 'Aim for about 200-300 words of explanation' : 'Aim for about 300-450 words of explanation'} in markdown, then key concepts, common mistakes and 3 practice questions.
+- Explain in steps and give a concrete worked example for each important idea, with the numbers or situation shown, before any abstract rule or diagram. Examples matter more than diagrams: do not tell the learner to draw things unless the idea cannot be understood without one.
+- Cover everything the materials say about the lesson's topic, in the order the materials give it. Do not skip a section, definition, formula or worked example that the materials contain for this topic.
+- The materials mark pages like "[Page 12]". Say where each part comes from, in the text, as "(page 12)" or "(pages 12-14)". Use only page numbers that appear in the materials. If the materials carry no page marks, do not mention pages.
+- Maths: write every formula in LaTeX between double dollar signs, like $$E = mc^2$$ (and $$\\ce{2H2 + O2 -> 2H2O}$$ for chemical equations). Put a long formula on its own line. Never use square brackets or \\( \\) for maths. Separate paragraphs with a blank line.
 - Only where the materials support them (otherwise an empty array, never filler): "definitions" (2 to 6 terms), "formulas" ("latex" as bare TeX with no $ delimiters, with each symbol in "variables"), and "exercises" (1 to 3 short open-ended items with "hint", "solution_steps", "answer").
 - Every practice question is answerable from the lesson, with four options "A) ", "B) ", "C) ", "D) " and correct_answer as just the letter.
-- Where a structure, process, cycle or comparison is central, include a short "Visual explanation" heading with what should be drawn and what each label means. Do not fabricate detailed structures.
-JSON rules: every backslash inside a string must be doubled (write "\\\\frac", not "\\frac"), and line breaks inside strings must be written as \\n.
+JSON rules: every backslash inside a string must be doubled (write "\\\\frac", not "\\frac"), and a line break inside a string is the JSON escape \\n (one backslash then n, which becomes a real line break when parsed; never write \\\\n, which would show as the letters backslash-n).
 Return JSON: {"lessons": [{"lesson_number": number, "title": string, "origin": "notes"|"beyond_notes", "learning_objectives": [string], "content": "markdown", "key_concepts": [string],
  "worked_example": {"problem": string, "solution_steps": [string], "answer": string},
  "common_mistakes": [string], "definitions": [{"term": string, "meaning": string}],

@@ -18,6 +18,15 @@ async function extractTextFromPptx(buffer: Buffer): Promise<string> {
   return out.join('\n\n');
 }
 
+/** Same as pdf-parse's own page text, with a "[Page N]" line first so lessons can say where in the file something is. */
+export function renderPageWithNumber(pageData: any): Promise<string> {
+  return pageData.getTextContent({ normalizeWhitespace: false, disableCombineTextItems: false }).then((content: any) => {
+    let lastY: number | undefined; let text = '';
+    for (const item of content.items) { if (lastY === item.transform[5] || lastY === undefined) text += item.str; else text += '\n' + item.str; lastY = item.transform[5]; }
+    return `[Page ${pageData.pageNumber ?? (pageData.pageIndex ?? 0) + 1}]\n${text}`;
+  });
+}
+
 export function cleanText(text: string): string {
   return text
     .replace(/\(cid:\d+\)/gi, ' ')
@@ -46,7 +55,7 @@ export async function parseDocument(buffer: Buffer, ext: string, mimeType?: stri
   if (ext === 'ppt') throw new ParseError('Legacy .ppt format is not supported directly. Please convert it to .pptx or PDF and try again.');
   if (ext === 'pdf') {
     if (buffer.subarray(0, 5).toString('latin1') !== '%PDF-') throw new ParseError('That file is not a valid PDF.');
-    try { const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default; text = (await pdfParse(buffer)).text || ''; }
+    try { const pdfParse = (await import('pdf-parse/lib/pdf-parse.js')).default; text = (await pdfParse(buffer, { pagerender: renderPageWithNumber })).text || ''; }
     catch (err: any) { console.error('[upload] pdf parse failed:', err?.message); throw new ParseError('We could not read that PDF. It may be password-protected or damaged. Try saving it again or upload a TXT copy.'); }
   } else if (ext === 'docx') {
     try { const mammoth = await import('mammoth'); text = (await mammoth.extractRawText({ buffer })).value || ''; }

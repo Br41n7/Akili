@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, type ComponentPropsWithRef, type ButtonHTM
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
+import 'katex/contrib/mhchem';
+import { normaliseMath } from '@/lib/math-text';
 import 'katex/dist/katex.min.css';
 import { AlertTriangle, Check, Loader2, X } from 'lucide-react';
 import { cn, toggleSelection } from '@/lib/utils';
@@ -426,7 +428,7 @@ export function ConfirmDialog({ open, title, body, confirmLabel, cancelLabel = '
 export function Prose({ children, className }: { children: string; className?: string }) {
   return (
     <div className={cn('prose-akili', className)}>
-      <ReactMarkdown remarkPlugins={[[remarkMath, { singleDollarTextMath: false }]]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: 'ignore', trust: false }]]}>{children}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[[remarkMath, { singleDollarTextMath: false }]]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: 'ignore', trust: false }]]}>{normaliseMath(children)}</ReactMarkdown>
     </div>
   );
 }
