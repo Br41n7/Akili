@@ -70,6 +70,7 @@ const list: TaskSpec[] = [
   { id: 'snap_read', providers: VISION, input: 'image', validation: 'snap_read', timeoutMs: BASE_MS, retries: 1 },
   { id: 'snap_solve', providers: GEMINI_FIRST, input: 'text', validation: 'snap_solve', timeoutMs: HEAVY_MS, retries: 1 },
   { id: 'ocr_extraction', providers: VISION, input: 'image', timeoutMs: BASE_MS, retries: 1 },
+  { id: 'figure_explain', providers: VISION, input: 'image', validation: 'figure_explain', timeoutMs: HEAVY_MS, retries: 1, heavy: true, lowEffort: true, maxOutputTokens: 3500 },
   { id: 'diagram_question', providers: VISION, input: 'either', validation: 'visual_question', timeoutMs: BASE_MS, retries: 1 },
   { id: 'visual_explain', providers: ['gemini', 'groq', 'openai'], input: 'either', validation: 'visual_explain', timeoutMs: BASE_MS, retries: 1, lowEffort: true },
   { id: 'visual_planner', providers: ['gemini', 'groq', 'openai'], input: 'either', validation: 'visual_spec', timeoutMs: BASE_MS, retries: 1 },

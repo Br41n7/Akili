@@ -19,5 +19,6 @@ Back up the database first. Files `0002` onward are written to be re-runnable.
 | 0012_plans.sql | Plans, subscriptions and the admin audit log (prices and limits editable in /admin/plans) |
 | 0013_feedback.sql | Learner feedback and lesson ratings (read at /admin/feedback) |
 | 0014_custom_tutor_style_and_region.sql | Custom tutor style (Pro) and a global default country |
+| 0015_figures.sql | Figures from your own materials: table, private `figures` bucket, `max_figures` plan limit |
 
 `o.sql` was removed: every statement in it already exists in `0002_adaptive.sql`.

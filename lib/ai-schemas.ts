@@ -7,6 +7,7 @@
  */
 import { validateMnemonic } from '@/lib/mnemonics';
 import { z } from 'zod';
+import { stripTags } from '@/lib/text-safe';
 import type { Validation } from '@/lib/ai';
 import { validateVisualDecision } from '@/lib/visual/schema';
 
@@ -538,6 +539,21 @@ const fact = (data: unknown): Validation<Obj> => {
   return ok({ type: str(data.type), title: str(data.title), fact: str(data.fact) });
 };
 
+const figureExplain = (data: unknown): Validation<Obj> => {
+  if (!isObj(data) || !str(data.summary)) return fail('expected { title, summary, labels, key_points, questions }');
+  const labels = (Array.isArray(data.labels) ? data.labels : []).filter(isObj).map(l => ({ text: stripTags(str(l.text)).slice(0, 80), meaning: stripTags(str(l.meaning)).slice(0, 300) })).filter(l => l.text).slice(0, 24);
+  const questions = (Array.isArray(data.questions) ? data.questions : []).filter(isObj).map(q => {
+    const options = strList(q.options).slice(0, 4).map((o, i) => `${'ABCD'[i]}) ${stripTags(o).replace(/^\s*[A-Da-d][).:]\s*/, '').slice(0, 200)}`);
+    const letter = str(q.correct_answer).trim().charAt(0).toUpperCase();
+    return { question: stripTags(str(q.question)).slice(0, 300), options, correct_answer: letter, explanation: stripTags(str(q.explanation)).slice(0, 400) };
+  }).filter(q => q.question && q.options.length === 4 && 'ABCD'.includes(q.correct_answer) && q.correct_answer).slice(0, 4);
+  return ok({
+    title: stripTags(str(data.title)).slice(0, 120) || 'Figure', summary: stripTags(str(data.summary)).slice(0, 900), labels,
+    key_points: strList(data.key_points).map(p => stripTags(p).slice(0, 300)).filter(Boolean).slice(0, 6), questions,
+    unclear: data.unclear === true,
+  });
+};
+
 const researchEdit = (data: unknown): Validation<Obj> => {
   if (!isObj(data) || str(data.text).length < 10) return fail('expected { text, changes }');
   return ok({ text: str(data.text), changes: strList(data.changes) });
@@ -718,6 +734,7 @@ export const SCHEMAS: Record<string, z.ZodTypeAny> = {
   theory_feedback: z.object({ covered: z.array(z.number().int().min(0)), feedback: z.string().min(5), improvement: zText }).passthrough(),
   mnemonic: z.object({ mnemonic: z.string().min(1), explanation: zText, breakdown: z.array(z.object({ letter: z.string().min(1), item: z.string().min(1) })) }),
   flashcard: z.object({ mnemonic: z.string().min(1), explanation: zText }).passthrough(),
+  figure_explain: z.object({ title: z.string().min(1), summary: z.string().min(10), labels: z.array(z.object({ text: z.string().min(1), meaning: zText })), key_points: zList, questions: z.array(z.object({ question: z.string().min(1), options: z.array(z.string()).length(4), correct_answer: z.string().length(1), explanation: zText })), unclear: z.boolean() }),
   visual_explain: z.object({ summary: z.string().min(10), parts: z.array(z.object({ id: z.string().min(1), text: z.string().min(1) })) }).passthrough(),
   fact: z.object({ type: zText, title: zText, fact: z.string().min(1) }).passthrough(),
   research_edit: z.object({ text: z.string().min(10), changes: zList }).passthrough(),
@@ -761,6 +778,7 @@ const RAW_VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
   visual_question: visualQuestion,
   visual_spec: validateVisualDecision,
   visual_explain: visualExplain,
+  figure_explain: figureExplain,
   fact,
   research_edit: researchEdit,
   quiz_analysis: quizAnalysis,

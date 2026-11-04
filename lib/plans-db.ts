@@ -8,21 +8,21 @@ import { FREE_DAILY_LIMIT } from './ai-quota';
  */
 export type PlanId = 'free' | 'pro';
 export interface PlanLimits {
-  daily_ai: number; course_material_chars: number; max_projects: number | null; daily_image_generations: number; daily_visual_plans: number;
+  daily_ai: number; course_material_chars: number; max_projects: number | null; max_figures: number; daily_image_generations: number; daily_visual_plans: number;
 }
 export interface PlanRow { id: PlanId; name: string; price_kobo: number | null; currency: string; interval: 'month'; active: boolean; features: Feature[]; limits: PlanLimits }
 export interface SubscriptionRow { user_id: string; plan_id: string; status: string; current_period_end: string | null; source?: string }
 
 export const DEFAULT_PLANS: Record<PlanId, PlanRow> = {
   free: { id: 'free', name: 'Free', price_kobo: 0, currency: 'NGN', interval: 'month', active: true, features: [],
-    limits: { daily_ai: FREE_DAILY_LIMIT, course_material_chars: 30_000, max_projects: 5, daily_image_generations: 0, daily_visual_plans: 10 } },
+    limits: { daily_ai: FREE_DAILY_LIMIT, course_material_chars: 30_000, max_projects: 5, max_figures: 10, daily_image_generations: 0, daily_visual_plans: 10 } },
   pro: { id: 'pro', name: 'Pro', price_kobo: null, currency: 'NGN', interval: 'month', active: true, features: [...FEATURES],
-    limits: { daily_ai: 200, course_material_chars: 150_000, max_projects: null, daily_image_generations: 20, daily_visual_plans: 100 } },
+    limits: { daily_ai: 200, course_material_chars: 150_000, max_projects: null, max_figures: 200, daily_image_generations: 20, daily_visual_plans: 100 } },
 };
 
 // Bounds an admin may set. Keeps a typo (an extra zero, a negative) from breaking the app or the bill.
 export const LIMIT_BOUNDS: Record<keyof PlanLimits, { min: number; max: number; nullable?: boolean }> = {
-  daily_ai: { min: 1, max: 100_000 }, course_material_chars: { min: 5_000, max: 1_000_000 }, max_projects: { min: 1, max: 100_000, nullable: true },
+  daily_ai: { min: 1, max: 100_000 }, course_material_chars: { min: 5_000, max: 1_000_000 }, max_projects: { min: 1, max: 100_000, nullable: true }, max_figures: { min: 0, max: 100_000 },
   daily_image_generations: { min: 0, max: 10_000 }, daily_visual_plans: { min: 0, max: 10_000 },
 };
 export const MAX_PRICE_KOBO = 100_000_00; // 100,000 naira
@@ -67,7 +67,7 @@ export function planCapabilities(plan: PlanRow, env: Record<string, string | und
   return {
     plan: plan.id === 'pro' || base ? 'pro' : 'free', has,
     limits: {
-      dailyAi: more(plan.limits.daily_ai, envCaps.limits.dailyAi), maxProjects,
+      dailyAi: more(plan.limits.daily_ai, envCaps.limits.dailyAi), maxProjects, maxFigures: more(plan.limits.max_figures, envCaps.limits.maxFigures),
       dailyImageGenerations: more(plan.limits.daily_image_generations, envCaps.limits.dailyImageGenerations),
       dailyVisualPlans: more(plan.limits.daily_visual_plans, envCaps.limits.dailyVisualPlans),
       courseMaterialChars: envCaps.has('long_materials') ? Math.max(plan.limits.course_material_chars, envCaps.limits.courseMaterialChars) : more(plan.limits.course_material_chars, envCaps.limits.courseMaterialChars),

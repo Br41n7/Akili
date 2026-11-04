@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import {
   ArrowLeft, BarChart3, BookOpen, Brain, CalendarDays, Camera, Lightbulb, FileText, GraduationCap, HelpCircle, MessageSquare,
-  MoreHorizontal, ShieldAlert, Sparkles, X, Zap,
+  MoreHorizontal, ShieldAlert, Sparkles, X, Zap, Image as ImageIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button, Chip, ErrorState, IconButton, Skeleton } from '@/components/ui';
@@ -20,18 +20,20 @@ import SnapSolve from '@/components/SnapSolve';
 import AskAI from '@/components/AskAI';
 import TopicAnalysis from '@/components/TopicAnalysis';
 import Materials from '@/components/Materials';
+import FiguresView from '@/components/FiguresView';
 import LearningProgress from '@/components/LearningProgress';
 import PlanView from '@/components/PlanView';
 import ResearchLab from '@/components/ResearchLab';
 import QuickNoteModal from '@/components/QuickNoteModal';
 import ProjectSidebar from '@/components/ProjectSidebar';
 
-type Tab = 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'study' | 'help' | 'snap' | 'ask' | 'analysis' | 'progress' | 'research' | 'plan';
+type Tab = 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'study' | 'help' | 'snap' | 'ask' | 'analysis' | 'progress' | 'research' | 'plan' | 'figures';
 
 interface TabDef { id: Tab; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; desc: string }
 
 const TABS: TabDef[] = [
   { id: 'materials', label: 'Materials', icon: FileText, desc: 'Notes and documents' },
+  { id: 'figures', label: 'Figures', icon: ImageIcon, desc: 'Diagrams from your own materials' },
   { id: 'course', label: 'Course', icon: GraduationCap, desc: 'Lessons built from your materials' },
   { id: 'quiz', label: 'Quiz', icon: HelpCircle, desc: 'Practice that adapts to you' },
   { id: 'exam', label: 'Exam', icon: ShieldAlert, desc: 'Timed mock exam' },
@@ -167,6 +169,7 @@ export default function ProjectPage() {
 
       <main className="mx-auto w-full max-w-3xl flex-1 pb-28 md:pb-10">
         {tab === 'materials' && <Materials projectId={projectId} userId={user.id} />}
+        {tab === 'figures' && <FiguresView projectId={projectId} />}
         {tab === 'course' && <CourseView projectId={projectId} userId={user.id} region={region} persona={persona} userGroqKey={userGroqKey} onGoToMaterials={() => setTab('materials')} />}
         {tab === 'analysis' && <TopicAnalysis projectId={projectId} examType={project.exam_board || project.exam_type || undefined} isSecondary={levelOf(project) === 'secondary'} />}
         {tab === 'plan' && <PlanView projectId={projectId} userId={user.id} onGoTo={t => setTab(t as Tab)} />}
