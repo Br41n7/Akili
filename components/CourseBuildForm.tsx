@@ -5,10 +5,10 @@ import { DEPTHS, MAX_GOALS, depthAllowed, pagesOf, type BuildOptions, type Depth
 import { Sparkles } from 'lucide-react';
 
 export interface MaterialItem { id: string; name: string; chars: number }
-interface Props { /** The learner's materials; when given, they can pick which ones to use. */ materials?: MaterialItem[]; /** Plain-words note on how much will be read. */ notice?: string; truncated?: boolean; deepAllowed?: boolean; webAvailable?: boolean; value: BuildOptions; onChange: (v: BuildOptions) => void; onSubmit: () => void; busy?: boolean; submitLabel: string }
+interface Props { /** The learner's materials; when given, they can pick which ones to use. */ materials?: MaterialItem[]; /** Plain-words note on how much will be read. */ notice?: string; truncated?: boolean; deepAllowed?: boolean; webAvailable?: boolean; /** True when a chosen material has page marks (a PDF uploaded recently), so page by page can work. */ pagesAvailable?: boolean; value: BuildOptions; onChange: (v: BuildOptions) => void; onSubmit: () => void; busy?: boolean; submitLabel: string }
 
 /** The few choices that decide how big the course is and where its content may come from. */
-export default function CourseBuildForm({ materials, notice, truncated, deepAllowed = true, webAvailable, value, onChange, onSubmit, busy, submitLabel }: Props) {
+export default function CourseBuildForm({ materials, notice, truncated, deepAllowed = true, webAvailable, pagesAvailable = false, value, onChange, onSubmit, busy, submitLabel }: Props) {
   const id = useId();
   const picked = new Set(value.sourceIds?.length ? value.sourceIds : (materials || []).map(m => m.id));
   const toggle = (mid: string) => {
@@ -19,6 +19,14 @@ export default function CourseBuildForm({ materials, notice, truncated, deepAllo
   return (
     <div className="space-y-4">
       <div className="space-y-2">
+        <p className="text-sm font-bold">How should it teach?</p>
+        <Segmented<'topics' | 'pages'> label="Course style" value={value.mode === 'pages' && pagesAvailable ? 'pages' : 'topics'} onChange={mode => onChange({ ...value, mode })}
+          options={[{ value: 'topics', label: 'By topic' }, { value: 'pages', label: 'Page by page' }]} />
+        <p className="text-xs text-muted">{value.mode === 'pages' && pagesAvailable
+          ? 'Explains your PDF in order, a few pages per lesson, with examples. Nothing is skipped. Notes and files without page numbers are left out of this style.'
+          : pagesAvailable ? 'By topic groups your material into themes. Choose Page by page to be walked through the PDF in order.' : 'Page by page needs a PDF with page numbers. PDFs uploaded before this update do not have them: upload the PDF again to use it.'}</p>
+      </div>
+      <div className={`space-y-2 ${value.mode === 'pages' && pagesAvailable ? 'hidden' : ''}`}>
         <p className="text-sm font-bold">How deep should it go?</p>
         <Segmented<Depth> label="Course depth" value={value.depth} onChange={depth => onChange({ ...value, depth })}
           options={(Object.keys(DEPTHS) as Depth[]).filter(d => depthAllowed(d, deepAllowed) || value.depth === d).map(d => ({ value: d, label: DEPTHS[d].label }))} />

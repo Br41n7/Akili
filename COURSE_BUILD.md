@@ -78,3 +78,17 @@ Reported by a learner: formulas showed as `\n[\ce{A + B <=> C + D}]`, lessons sk
 - **Page references:** new PDF uploads carry `[Page N]` markers in their text; lessons are asked to cite "(page 12)". **Files uploaded before this change have no page marks; re-upload them to get page references.** Word and PowerPoint files have none (PowerPoint slides are already numbered).
 - **Coverage and style:** the outline prompt must place every chapter or page range in some lesson in order; lessons are asked for plain words, step-by-step explanation, a worked example per idea before any diagram, and no "draw this" unless essential. Lesson length rose slightly (about 300-450 words at university level).
 - **Not verified:** none of this was run against a real model. Whether a model truly covers every page and cites correct page numbers must be checked on a real PDF. A very long file is still limited by the plan's page budget, so "covers everything" is only true for what the plan reads.
+
+## Page-by-page courses (phase4i)
+In the build form, "How should it teach?" has **By topic** (the AI plans themes, as before) and **Page by page**.
+- **Outline without AI:** `lib/page-walk.ts` reads the `[Page N]` marks in the chosen PDFs and groups pages into lessons (up to 3 pages, fewer when pages are dense), and lessons into modules of 4. Every page lands in exactly one lesson, in order, so none can be skipped. Titles are "Pages 1-3", and the model may add a topic after a colon.
+- **Per-lesson text:** each lesson is written from only its own pages (`pageContext`), with a `## Page N` section per page, every definition/formula/example on the page explained step by step, and an added example (marked "Example (added):") where the page has none.
+- **Cost:** no AI call for the outline, then about one request per 2 lessons (about 1 per 6 pages). The plan's page budget still applies, so Free reads about 17 pages and Pro about 83 (editable in Admin → Plans).
+- **Needs page marks:** only PDFs uploaded since phase4h have them. Notes, Word files and older PDFs are left out of this style, and the form says so.
+- **Not verified:** no run against a real model. Whether lessons really cover every item on a page and cite pages correctly needs a real PDF test.
+
+## Past questions library (phase4i)
+`/pastq` lists live PastQ banks (read with the learner's own session; RLS allows `status = 'live'`). Free banks and banks the learner owns import in one tap through the existing `/import?bank=` flow. Paid banks show the price and **Buy on PastQ** (opens PastQ in a new tab); when the learner returns, the page refetches purchases on tab focus and the button becomes **Import**. Buying stays on PastQ on purpose: its Paystack checkout and the `purchases` row written by its webhook remain the single record, so there is no second payment system to reconcile.
+- Set `NEXT_PUBLIC_PASTQ_BANK_URL` to PastQ's bank page, for example `https://pastq.co/bank/{id}`. I do not know PastQ's real page path, so until you set it the button opens the PastQ home page.
+- Prices are read as kobo (the `question_banks` table comment says so) and shown in naira. If PastQ stores naira instead, prices will look 100 times too small; check one paid bank.
+- Not verified against the real PastQ data or a real purchase.

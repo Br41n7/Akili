@@ -118,11 +118,11 @@ export default function ProjectsPage() {
         {status !== 'loading' && (
           <Surface className="flex flex-col gap-3 border-tick/30 bg-tick-wash p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <p className="font-bold text-ink">Bought a question bank on PastQ?</p>
-              <p className="text-sm text-ink/70">Import it and Akili builds a course and topic analysis from the past questions.</p>
+              <p className="font-bold text-ink">Past questions for your exam</p>
+              <p className="text-sm text-ink/70">Browse PastQ question banks here. Free ones import in one tap; paid ones you buy on PastQ and import here. Akili then builds a course and topic analysis from them.</p>
             </div>
-            <Link href="/import" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-tick px-4 text-sm font-semibold text-white">
-              <Upload size={16} /> Import from PastQ
+            <Link href="/pastq" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl bg-tick px-4 text-sm font-semibold text-white">
+              <Upload size={16} /> Browse past questions
             </Link>
           </Surface>
         )}

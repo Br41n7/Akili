@@ -5,6 +5,7 @@ import LessonRating from '@/components/LessonRating';
 import { pagesOf } from '@/lib/course-builder';
 import { dbErrorNote, dbSafe } from '@/lib/text-safe';
 import CourseBuildForm from '@/components/CourseBuildForm';
+import { hasPageMarks, pageContext, pagesOfLesson, pageSources, planPageWalk } from '@/lib/page-walk';
 import {
   DEFAULT_OPTIONS, DEPTHS, cleanGoals, fillModule, isPending, modulePrompt, nextPendingIndex, outlineContext, outlineOf, outlinePrompt, pendingModules,
   applyBudget, coverageNotice, documentText, depthAllowed, attachSources, balancedChunks, groundingRequest, retryTransient, selectContext, sizeFor, totalChars, type BuildOptions, type LearnerScope, type Research, type Source,
@@ -104,6 +105,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
   useEffect(() => { if (status === 'ready') loadSources().then(setLibrary).catch(() => {}); }, [status, showRebuild, course?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const materials = useMemo(() => library.map(s => ({ id: s.id as string, name: s.name, chars: s.content.length })), [library]);
   const cover = useMemo(() => usable(library, opts.sourceIds).coverage, [library, opts.sourceIds, budget]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pagesOn = useMemo(() => hasPageMarks(usable(library, opts.sourceIds).sources), [library, opts.sourceIds, budget]); // eslint-disable-line react-hooks/exhaustive-deps
   const notice = coverageNotice(cover, { upgradePages: caps.plan === 'pro' ? 0 : pagesOf(pro.limits.course_material_chars) });
   const scope = (): LearnerScope => ({
     topic: project ? studySubjectText(project) : 'the learner’s topic', secondary: project ? levelOf(project) === 'secondary' : false,
@@ -129,10 +131,11 @@ export default function CourseView({ projectId, userId, region, persona, userGro
     }
     // Lessons are requested a few at a time: smaller answers are faster, less likely to be cut off, and kinder to free-tier limits.
     const outline = outlineOf(m); const titles = current.modules.map((x: any) => x.title); const context = selectContext(sources, query);
+    const contextFor = (lessons: any[]) => { const ranges = lessons.map(pagesOfLesson).filter(Boolean) as any[]; return ranges.length ? pageContext(sources, ranges) : context; };
     const parts = outline.lessons.length ? balancedChunks(outline.lessons.length, 2) : [null];
     const written: any[] = [];
     for (const part of parts) {
-      const data = await ai('course_module', modulePrompt(scope(), bopts, titles, outline, m.module_number, context, research, part ? { lessons: outline.lessons.slice(part.start, part.start + part.count), startNumber: part.start + 1 } : undefined));
+      const data = await ai('course_module', modulePrompt(scope(), bopts, titles, outline, m.module_number, part ? contextFor(outline.lessons.slice(part.start, part.start + part.count)) : context, research, part ? { lessons: outline.lessons.slice(part.start, part.start + part.count), startNumber: part.start + 1 } : undefined));
       written.push(...data.lessons);
     }
     const latest = courseRef.current; // lesson visuals may have been saved meanwhile
@@ -167,8 +170,11 @@ export default function CourseView({ projectId, userId, region, persona, userGro
       const clean = { ...opts, depth: depthAllowed(opts.depth, deepOn) ? opts.depth : 'standard' as const, goals: cleanGoals(opts.goals), web: webOn };
       const size = sizeFor(clean.depth, totalChars(sources), !!clean.goals);
       if (coverage.truncated) toast(coverageNotice(coverage, { upgradePages: caps.plan === 'pro' ? 0 : pagesOf(pro.limits.course_material_chars) }), { duration: 9000 });
-      const outline = await ai('course_outline', outlinePrompt(scope(), clean, outlineContext(sources), size));
-      const modules = pendingModules(outline, clean);
+      // Page by page: the outline comes from the file's own page numbers (no AI call), so no page can be skipped.
+      const walk = clean.mode === 'pages' ? planPageWalk(pageSources(sources), scope().topic) : null;
+      if (clean.mode === 'pages' && !walk) { setGenError('Page by page needs a PDF with page numbers. Upload the PDF again in Materials, or choose By topic.'); return; }
+      const outline = walk ?? await ai('course_outline', outlinePrompt(scope(), clean, outlineContext(sources), size));
+      const modules = pendingModules(outline, walk ? { ...clean, sourceIds: pageSources(sources).map(x => x.id as string).filter(Boolean) } : clean);
       const { data: saved, error } = await supabase.from('courses').insert({
         project_id: projectId, user_id: userId, title: outline.title, description: outline.description,
         subject: project?.subject ?? null, exam_type: project?.exam_type ?? null, modules: dbSafe(modules),
@@ -266,7 +272,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
         <EmptyState icon={<GraduationCap size={22} />} title="Build your course">
           Akili reads the notes and documents in Materials and turns them into lessons, worked examples and practice questions. It writes an outline first, then each module.
         </EmptyState>
-        <Surface className="p-4"><CourseBuildForm materials={materials} notice={notice} truncated={cover.truncated} deepAllowed={deepOn} webAvailable={webOn} value={opts} onChange={setOpts} onSubmit={generate} submitLabel="Build course" /></Surface>
+        <Surface className="p-4"><CourseBuildForm materials={materials} notice={notice} truncated={cover.truncated} deepAllowed={deepOn} webAvailable={webOn} pagesAvailable={pagesOn} value={opts} onChange={setOpts} onSubmit={generate} submitLabel="Build course" /></Surface>
         {genError && <ErrorState title="No course yet" message={genError} onRetry={genError.includes('Materials') ? undefined : generate} />}
         {genError.includes('Materials') && onGoToMaterials && <Button variant="quiet" block onClick={onGoToMaterials}>Go to Materials</Button>}
       </div>
@@ -476,7 +482,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
       {buildingIdx === null && (showRebuild ? (
         <Surface className="space-y-3 p-4">
           <p className="text-sm font-semibold">Rebuilding writes a new course from your current materials. Lesson progress in the old course will not carry over.</p>
-          <CourseBuildForm materials={materials} notice={notice} truncated={cover.truncated} deepAllowed={deepOn} webAvailable={webOn} value={opts} onChange={setOpts} onSubmit={generate} submitLabel="Rebuild course" />
+          <CourseBuildForm materials={materials} notice={notice} truncated={cover.truncated} deepAllowed={deepOn} webAvailable={webOn} pagesAvailable={pagesOn} value={opts} onChange={setOpts} onSubmit={generate} submitLabel="Rebuild course" />
           <Button variant="ghost" block onClick={() => setShowRebuild(false)}>Cancel</Button>
         </Surface>
       ) : <Button variant="ghost" block onClick={() => setShowRebuild(true)}><RefreshCw size={16} /> Rebuild course from my materials</Button>)}
