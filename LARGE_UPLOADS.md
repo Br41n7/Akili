@@ -21,3 +21,9 @@ Nothing is kept: a file occupies Storage only between steps 2 and 3 (seconds), s
 - Memory: a 25 MB PDF is held in memory while parsing. Fine for normal use, untested at scale.
 - Scanned PDFs still yield no text (no PDF OCR).
 - Quiz, exam, study tools and Ask AI still read only the 12,000-character preview of each file.
+
+## Uploading from a computer (phase4j)
+Report: a learner could not upload materials from a PC. The exact error was not given, so these are the likely causes I found and fixed. **None has been confirmed as the cause.**
+- **No drag and drop.** The dashed upload box looked like a drop zone but only opened the file picker, and dropping a file made the browser open it and leave Akili. The Materials box and the new-project form now accept dropped files, and a file dropped anywhere else on the page no longer navigates away.
+- **Files over 4.5 MB** (PC files are usually bigger than phone photos) failed on the old route with a hosting error page and a vague "could not be processed". They now go through the large-upload path (phase4g; needs migration 0016), and any non-Akili error status now gets a plain message (too large, session ended, took too long, server problem).
+- Not changed and possible causes: a Word/PowerPoint file in the old `.doc` / `.ppt` format (not supported, message says to convert), a cloud-only OneDrive/Google Drive placeholder file that has not downloaded, and a browser extension or office network blocking Supabase Storage. If it still fails, ask for a screenshot of the red message and the file type and size.

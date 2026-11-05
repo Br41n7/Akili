@@ -28,6 +28,15 @@ export function formatSize(bytes: number): string {
   return bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** When the server answers with something that is not our JSON (a hosting error page, for instance), say what the status means. */
+export function uploadFailureNote(status: number): string {
+  if (status === 401 || status === 403) return 'Your session ended. Please sign in again and retry.';
+  if (status === 413) return 'That file is too large to send. Try a smaller file, or split it into parts.';
+  if (status === 504 || status === 408) return 'Reading that file took too long. Try a smaller file or fewer pages.';
+  if (status >= 500) return 'The server had a problem reading that file. Please try again in a minute.';
+  return 'That file could not be processed.';
+}
+
 /**
  * Reads a PDF/TXT file on the server, then saves it as a document in the project.
  * Throws an Error whose message is safe to show to the learner.
@@ -57,7 +66,7 @@ export async function uploadDocument(file: File, projectId: string, userId: stri
     throw new Error(e?.message && !/fetch|network/i.test(e.message) ? e.message : 'You seem to be offline. Check your connection and try again.');
   }
   const data = await res.json().catch(() => null);
-  if (!res.ok || !data) throw new Error(data?.error || 'That file could not be processed.');
+  if (!res.ok || !data) throw new Error(data?.error || uploadFailureNote(res.status));
 
   const { data: doc, error } = await supabase
     .from('documents')

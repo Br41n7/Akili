@@ -7,6 +7,7 @@ import { errorMessage } from '@/lib/utils';
 import { ACCEPTED_TYPES, uploadDocument } from '@/lib/upload-document';
 import UploadHelp from '@/components/UploadHelp';
 import { usePlan } from '@/lib/use-plan';
+import { useFileDrop } from '@/components/use-file-drop';
 import { Button, ConfirmDialog, EmptyState, ErrorState, ListSkeleton, Segmented, Surface, TextArea, TextInput, IconButton } from '@/components/ui';
 
 interface Props { projectId: string; userId: string }
@@ -38,12 +39,16 @@ export default function Materials({ projectId, userId }: Props) {
   };
 
   useEffect(load, [projectId, userId]);
+  const drop = useFileDrop(files => uploadMany(files), tab === 'docs');
 
-  const uploadFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const uploadFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     if (fileRef.current) fileRef.current.value = '';
     if (photoRef.current) photoRef.current.value = '';
-    if (files.length === 0) return;
+    return uploadMany(files);
+  };
+  const uploadMany = async (files: File[]) => {
+    if (files.length === 0 || uploading) return;
     setUploading(true);
     let added = 0;
     for (const file of files) {
@@ -118,11 +123,13 @@ export default function Materials({ projectId, userId }: Props) {
           <Surface className="space-y-3 p-4">
             <input ref={photoRef} type="file" accept="image/*" capture="environment" onChange={uploadFile} className="sr-only" aria-label="Take a photo of your notes" />
             <input ref={fileRef} type="file" multiple accept={ACCEPTED_TYPES} onChange={uploadFile} className="sr-only" aria-label="Choose PDF, Word, PPT, Image, or TXT files" />
-            <Button variant="quiet" block loading={uploading} onClick={() => fileRef.current?.click()} className="min-h-24 flex-col gap-1.5 border-2 border-dashed">
+            <div {...drop.handlers}>
+            <Button variant="quiet" block loading={uploading} onClick={() => fileRef.current?.click()} className={`min-h-24 flex-col gap-1.5 border-2 border-dashed ${drop.over ? 'border-biro bg-biro-wash' : ''}`}>
               <Upload size={22} />
               <span>{uploading ? 'Processing…' : 'Upload PDF, Word, PPT, Image, or TXT files'}</span>
-              <span className="text-xs font-normal text-muted">Up to {caps.limits.maxFileMb} MB per file</span>
+              <span className="text-xs font-normal text-muted">{drop.over ? 'Drop to upload' : `Up to ${caps.limits.maxFileMb} MB per file. On a computer you can also drag files here.`}</span>
             </Button>
+            </div>
             <div className="flex gap-2">
               <TextInput value={importUrl} onChange={e => setImportUrl(e.target.value)} placeholder="Paste a Google Docs, Google Slides, or webpage link" onKeyDown={e => e.key === 'Enter' && importFromUrl()} />
               <Button loading={importing} disabled={!importUrl.trim()} onClick={importFromUrl}><Link2 size={16} /> Import</Button>

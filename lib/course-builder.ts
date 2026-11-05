@@ -294,6 +294,9 @@ export async function retryTransient<T>(fn: () => Promise<T>, o: { delaysMs?: nu
   }
 }
 
+/** Failures where asking for less at once can help: a cut-off or malformed answer, a timeout, or a hosting error. Not limits or sign-in problems. */
+export const shouldSplit = (err: unknown) => { const c = (err as { code?: string } | null)?.code || ''; return ['AI_BAD_OUTPUT', 'TIMEOUT', 'AI_TIMEOUT'].includes(c) || /^HTTP_5\d\d$/.test(c); };
+
 export const nextPendingIndex = (modules: StoredModule[], from = 0) => modules.findIndex((m, i) => i >= from && isPending(m));
 export const builtCount = (modules: StoredModule[]) => modules.filter(m => !isPending(m)).length;
 export const lessonCount = (modules: StoredModule[]) => modules.reduce((n, m) => n + (m.lessons?.length || 0), 0);

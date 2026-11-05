@@ -5,6 +5,7 @@ import LessonRating from '@/components/LessonRating';
 import { pagesOf } from '@/lib/course-builder';
 import { dbErrorNote, dbSafe } from '@/lib/text-safe';
 import CourseBuildForm from '@/components/CourseBuildForm';
+import { shouldSplit } from '@/lib/course-builder';
 import { hasPageMarks, pageContext, pagesOfLesson, pageSources, planPageWalk } from '@/lib/page-walk';
 import {
   DEFAULT_OPTIONS, DEPTHS, cleanGoals, fillModule, isPending, modulePrompt, nextPendingIndex, outlineContext, outlineOf, outlinePrompt, pendingModules,
@@ -43,6 +44,9 @@ export default function CourseView({ projectId, userId, region, persona, userGro
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState('');
+  const errorRef = useRef<HTMLDivElement>(null);
+  // A failure used to appear above the module list while the learner was looking at the spinner lower down.
+  useEffect(() => { if (genError) errorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, [genError]);
   const [showRebuild, setShowRebuild] = useState(false);
   const [opts, setOpts] = useState<BuildOptions>(DEFAULT_OPTIONS);
   const [buildingIdx, setBuildingIdx] = useState<number | null>(null);
@@ -134,9 +138,14 @@ export default function CourseView({ projectId, userId, region, persona, userGro
     const contextFor = (lessons: any[]) => { const ranges = lessons.map(pagesOfLesson).filter(Boolean) as any[]; return ranges.length ? pageContext(sources, ranges) : context; };
     const parts = outline.lessons.length ? balancedChunks(outline.lessons.length, 2) : [null];
     const written: any[] = [];
+    const writePart = (part: { start: number; count: number } | null) => ai('course_module', modulePrompt(scope(), bopts, titles, outline, m.module_number, part ? contextFor(outline.lessons.slice(part.start, part.start + part.count)) : context, research, part ? { lessons: outline.lessons.slice(part.start, part.start + part.count), startNumber: part.start + 1 } : undefined));
     for (const part of parts) {
-      const data = await ai('course_module', modulePrompt(scope(), bopts, titles, outline, m.module_number, part ? contextFor(outline.lessons.slice(part.start, part.start + part.count)) : context, research, part ? { lessons: outline.lessons.slice(part.start, part.start + part.count), startNumber: part.start + 1 } : undefined));
-      written.push(...data.lessons);
+      try { written.push(...(await writePart(part)).lessons); }
+      catch (err) {
+        // A pair of lessons can be too much for one answer (cut off, timed out, malformed). Try them one at a time before giving up.
+        if (!part || part.count < 2 || !shouldSplit(err)) throw err;
+        for (let k = 0; k < part.count; k++) written.push(...(await writePart({ start: part.start + k, count: 1 })).lessons);
+      }
     }
     const latest = courseRef.current; // lesson visuals may have been saved meanwhile
     const modules = dbSafe(fillModule(latest.modules, index, attachSources(written, research)));
@@ -416,7 +425,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
         )}
       </Surface>
 
-      {genError && <ErrorState title="Course not updated" message={genError} />}
+      {genError && <div ref={errorRef} role="alert"><ErrorState title="Course not updated" message={genError} /></div>}
 
       <ul className="space-y-2">
         {(course.modules || []).map((mod: any) => {

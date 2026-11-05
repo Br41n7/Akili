@@ -92,3 +92,9 @@ In the build form, "How should it teach?" has **By topic** (the AI plans themes,
 - Set `NEXT_PUBLIC_PASTQ_BANK_URL` to PastQ's bank page, for example `https://pastq.co/bank/{id}`. I do not know PastQ's real page path, so until you set it the button opens the PastQ home page.
 - Prices are read as kobo (the `question_banks` table comment says so) and shown in naira. If PastQ stores naira instead, prices will look 100 times too small; check one paid bank.
 - Not verified against the real PastQ data or a real purchase.
+
+## When a module stops (phase4k)
+Report: a Pro learner uploaded a ~19 MB PowerPoint; the course outline appeared but modules did not get written and it "just stopped". Cause not confirmed (no error text or server log was available). Changes made:
+- If writing a pair of lessons fails with a malformed or cut-off answer, a timeout or a hosting 5xx error, the builder now retries those lessons one at a time before reporting failure.
+- A failure now scrolls into view, so it is not missed below the module list.
+- To find the real cause: read the red message (it ends with the provider reasons in brackets), and in Vercel open Logs, filter `/api/ai/generate`, and look at the `[ai]` lines for that time.
