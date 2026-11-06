@@ -79,14 +79,6 @@ Reported by a learner: formulas showed as `\n[\ce{A + B <=> C + D}]`, lessons sk
 - **Coverage and style:** the outline prompt must place every chapter or page range in some lesson in order; lessons are asked for plain words, step-by-step explanation, a worked example per idea before any diagram, and no "draw this" unless essential. Lesson length rose slightly (about 300-450 words at university level).
 - **Not verified:** none of this was run against a real model. Whether a model truly covers every page and cites correct page numbers must be checked on a real PDF. A very long file is still limited by the plan's page budget, so "covers everything" is only true for what the plan reads.
 
-## Page-by-page courses (phase4i)
-In the build form, "How should it teach?" has **By topic** (the AI plans themes, as before) and **Page by page**.
-- **Outline without AI:** `lib/page-walk.ts` reads the `[Page N]` marks in the chosen PDFs and groups pages into lessons (up to 3 pages, fewer when pages are dense), and lessons into modules of 4. Every page lands in exactly one lesson, in order, so none can be skipped. Titles are "Pages 1-3", and the model may add a topic after a colon.
-- **Per-lesson text:** each lesson is written from only its own pages (`pageContext`), with a `## Page N` section per page, every definition/formula/example on the page explained step by step, and an added example (marked "Example (added):") where the page has none.
-- **Cost:** no AI call for the outline, then about one request per 2 lessons (about 1 per 6 pages). The plan's page budget still applies, so Free reads about 17 pages and Pro about 83 (editable in Admin → Plans).
-- **Needs page marks:** only PDFs uploaded since phase4h have them. Notes, Word files and older PDFs are left out of this style, and the form says so.
-- **Not verified:** no run against a real model. Whether lessons really cover every item on a page and cite pages correctly needs a real PDF test.
-
 ## Past questions library (phase4i)
 `/pastq` lists live PastQ banks (read with the learner's own session; RLS allows `status = 'live'`). Free banks and banks the learner owns import in one tap through the existing `/import?bank=` flow. Paid banks show the price and **Buy on PastQ** (opens PastQ in a new tab); when the learner returns, the page refetches purchases on tab focus and the button becomes **Import**. Buying stays on PastQ on purpose: its Paystack checkout and the `purchases` row written by its webhook remain the single record, so there is no second payment system to reconcile.
 - Set `NEXT_PUBLIC_PASTQ_BANK_URL` to PastQ's bank page, for example `https://pastq.co/bank/{id}`. I do not know PastQ's real page path, so until you set it the button opens the PastQ home page.
@@ -98,3 +90,18 @@ Report: a Pro learner uploaded a ~19 MB PowerPoint; the course outline appeared 
 - If writing a pair of lessons fails with a malformed or cut-off answer, a timeout or a hosting 5xx error, the builder now retries those lessons one at a time before reporting failure.
 - A failure now scrolls into view, so it is not missed below the module list.
 - To find the real cause: read the red message (it ends with the provider reasons in brackets), and in Vercel open Logs, filter `/api/ai/generate`, and look at the `[ai]` lines for that time.
+
+## Whole-material courses, citations and "build more" (phase4m)
+Your friend asked for a course that digests all the uploaded PDFs by topic, cites them, and lets the learner build more from what is not covered yet, instead of a page-by-page mode or a "too many pages" pop-up. So:
+- **Page-by-page mode removed** (the build form is back to Quick / Standard / Deep).
+- **No more cut-off after about 17 pages.** The reading bound is now Free 400,000 characters (about 220 pages) and Pro 1,000,000 (migration `0017`; edited limits are left alone). The outline takes an even sample across every file; each module pulls the parts that match its topic from ALL the text. Cost is unchanged, since the AI only ever sees about 12,000 characters for the outline and 9,000 per module.
+- **Citations:** lessons are asked to cite what comes from the materials as `(Chem.pdf, page 12)` (or `(Chem.pdf)` where there are no page marks), and to start anything added with "Beyond your notes:". The model can still cite wrongly; learners should check important claims against the file.
+- **Coverage:** each module records which pieces of the materials it used (`coverage`, short hashes). A card shows "About N% of your materials is in this course so far" with **Build more from the rest of my materials**, which plans two more modules from the unused parts and writes them. Courses made before this change have no coverage record, so the card does not appear for them.
+- **Honest limit:** each module draws on about 9,000 characters (about 5 pages) of source. A 200-page book therefore needs many "build more" rounds to be fully used; the percentage shows how far along it is. Raising the 9,000 needs care on free AI tiers.
+- **Other tools read the whole file too:** Ask AI (picks parts that match the question), Quiz (matches the topic, or samples across everything), Exam, Study tools and Help tools. Before, they read only the first 12,000 characters of the newest few files.
+- **Not verified:** none of this has run against a real model or a long real PDF.
+
+## Limits that used to live only in the browser (phase4m)
+- **Deep courses** are now also checked on the server: the outline request carries its size ("exactly N modules, about M lessons"), and anything bigger than the Standard shape needs the `deep_courses` feature (403 `PLAN_REQUIRED` otherwise). Someone who edits that text only gets a Standard-sized course.
+- **Material size** is no longer a cost control (see above). Cost is bounded by the server-side daily AI allowance (Free 20) and the server's 24,000-character cap on any single prompt.
+- **Still browser-side:** the number of modules per course (courses are saved straight from the browser), the 12-module cap, and which materials a build uses. They affect how much is built, not how many AI requests can be made.

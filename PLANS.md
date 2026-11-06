@@ -51,3 +51,7 @@ Free learners choose from five preset tutor styles. Pro learners can also write 
 - Public copy, the page title, exam boards (A-Level, GCSE, IB, AP, SAT, ACT, CBSE and national curriculum added), class names (Grade, Year, Class), more subjects and 10 more countries (UK, US, Canada, Australia, Uganda, Tanzania, Egypt, Pakistan, Bangladesh) are now worldwide.
 - New accounts default to the country "Other" (neutral examples) until a country is chosen. The "African" mnemonic style is now "My region".
 - Not done: payments for non-Nigerian learners (prices are in naira with Paystack), translations of the interface, and exam-specific question formats for the new boards beyond the general wording.
+
+
+## Custom tutor style is free (phase4m)
+The Free plan now includes `custom_tutor_style` (it is fixed in code for Free, so an admin cannot switch it off by accident). Free keeps 20 AI requests a day. Pro adds the other features.

@@ -48,3 +48,6 @@ Rules:
 - "questions": 3 multiple-choice questions answerable from the figure, each with exactly four options, "correct_answer" as just the letter, and a short "explanation".
 Return JSON only: {"title": string, "summary": string, "unclear": boolean, "labels": [{"text": string, "meaning": string}], "key_points": [string], "questions": [{"question": string, "options": [string, string, string, string], "correct_answer": "A"|"B"|"C"|"D", "explanation": string}]}`;
 }
+
+/** Figures from uploads are switched off for now (set AKILI_FIGURES=true on the server and NEXT_PUBLIC_AKILI_FIGURES=true for the tab to bring them back). */
+export const figuresEnabled = (env: Record<string, string | undefined> = process.env) => env.AKILI_FIGURES === 'true';

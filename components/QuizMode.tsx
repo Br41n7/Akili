@@ -7,6 +7,7 @@ import { compactLearnerContext, getLearnerContext, recordEvidence } from '@/lib/
 import { summarizeAssessment } from '@/lib/local-learning';
 import QuizSettings from '@/components/QuizSettings';
 import { DEFAULT_QUESTIONS, QUESTION_TYPES, buildQuizPrompt, clampCount, isAnswerCorrect, shapeQuestions, theoryFraction, type QuizQuestionType, type TheoryMarks } from '@/lib/quiz-config';
+import { DOC_COLUMNS, materialContext, materialSources } from '@/lib/material-context';
 import ConceptVisual from '@/components/visual/ConceptVisual';
 import VisualRenderer from '@/components/visual/VisualRenderer';
 import { requestLessonVisual, shouldConsiderVisual } from '@/lib/visual/planner';
@@ -65,10 +66,11 @@ export default function QuizMode({ projectId, userId, region, persona }: Props) 
 
   const loadContext = async (limit: number, chars: number) => {
     const [{ data: docs }, learner] = await Promise.all([
-      supabase.from('documents').select('content').eq('project_id', projectId).eq('user_id', userId).limit(limit),
+      supabase.from('documents').select(DOC_COLUMNS).eq('project_id', projectId).eq('user_id', userId).limit(30),
       getLearnerContext(projectId, userId),
     ]);
-    return { context: (docs || []).map(d => d.content).join('\n\n').slice(0, chars), adaptive: compactLearnerContext(learner) };
+    // The topic picks the matching parts from ALL the uploaded files; with no topic, a sample from across them.
+    return { context: materialContext(materialSources(docs as any), topic, chars), adaptive: compactLearnerContext(learner) };
   };
 
   const start = async () => {

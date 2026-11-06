@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { loadUserPlan } from '@/lib/plans-db';
-import { FIGURE_BUCKET, MAX_FIGURE_BYTES, SIGNED_URL_SECONDS, cleanCaption, sniffImageType, storagePath, uploadFields } from '@/lib/figures';
+import { figuresEnabled, FIGURE_BUCKET, MAX_FIGURE_BYTES, SIGNED_URL_SECONDS, cleanCaption, sniffImageType, storagePath, uploadFields } from '@/lib/figures';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -12,6 +12,7 @@ const fail = (error: string, status: number, code?: string) => NextResponse.json
 
 /** The learner's saved figures for one project, with short-lived links to the pictures. */
 export async function GET(req: NextRequest) {
+  if (!figuresEnabled()) return NextResponse.json({ error: 'Figures are switched off for now.' }, { status: 404 });
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return fail('Please sign in again.', 401);
@@ -36,6 +37,7 @@ export async function GET(req: NextRequest) {
 
 /** Save one picture the learner chose. Checks the plan limit, the real file type and the size on the server. */
 export async function POST(req: NextRequest) {
+  if (!figuresEnabled()) return NextResponse.json({ error: 'Figures are switched off for now.' }, { status: 404 });
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return fail('Please sign in again.', 401);

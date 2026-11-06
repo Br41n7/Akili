@@ -33,7 +33,7 @@ interface TabDef { id: Tab; label: string; icon: React.ComponentType<{ size?: nu
 
 const TABS: TabDef[] = [
   { id: 'materials', label: 'Materials', icon: FileText, desc: 'Notes and documents' },
-  { id: 'figures', label: 'Figures', icon: ImageIcon, desc: 'Diagrams from your own materials' },
+  ...(process.env.NEXT_PUBLIC_AKILI_FIGURES === 'true' ? [{ id: 'figures' as const, label: 'Figures', icon: ImageIcon, desc: 'Diagrams from your own materials' }] : []),
   { id: 'course', label: 'Course', icon: GraduationCap, desc: 'Lessons built from your materials' },
   { id: 'quiz', label: 'Quiz', icon: HelpCircle, desc: 'Practice that adapts to you' },
   { id: 'exam', label: 'Exam', icon: ShieldAlert, desc: 'Timed mock exam' },

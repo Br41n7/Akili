@@ -6,7 +6,7 @@ import { getValidator } from '@/lib/ai-schemas';
 import { planQuota, recordUsage } from '@/lib/ai-quota';
 import { loadUserPlan } from '@/lib/plans-db';
 import { buildProjectContext, type ProjectRecord } from '@/lib/project-context';
-import { FIGURE_BUCKET, FIGURE_SYSTEM, buildExplainPrompt, ownsPath, sniffImageType } from '@/lib/figures';
+import { figuresEnabled, FIGURE_BUCKET, FIGURE_SYSTEM, buildExplainPrompt, ownsPath, sniffImageType } from '@/lib/figures';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -17,6 +17,7 @@ const fail = (error: string, status: number, code?: string, reasons?: string[]) 
 
 /** Explain one saved figure with a vision model. The picture is read from private storage on the server and the answer is saved, so each figure is explained once (unless asked again). */
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!figuresEnabled()) return NextResponse.json({ error: 'Figures are switched off for now.' }, { status: 404 });
   try {
     const supabase = await createSupabaseServerClient();
     const { data: { user } } = await supabase.auth.getUser();

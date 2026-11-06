@@ -9,6 +9,7 @@ import { buildConfusionPrompt, buildShortcutPrompt, confusionToText, shortcutToT
 
 interface Props { projectId: string; userId: string; region: string }
 type Mode = 'confused' | 'shortcuts';
+import { DOC_COLUMNS, materialContext, materialSources } from '@/lib/material-context';
 const MAX_CONTEXT = 8000;
 
 const copy = (text: string) => navigator.clipboard?.writeText(text).then(() => toast.success('Copied'), () => toast.error('Could not copy'));
@@ -62,8 +63,8 @@ export function HelpTools({ projectId, userId, region }: Props) {
   const [shortcuts, setShortcuts] = useState<ShortcutSet | null>(null);
 
   const loadContext = async () => {
-    const { data } = await supabase.from('documents').select('name, content').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: true });
-    return (data || []).map((d: any) => `## ${d.name}\n${d.content || ''}`).join('\n\n').slice(0, MAX_CONTEXT);
+    const { data } = await supabase.from('documents').select(DOC_COLUMNS).eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: true }).limit(30);
+    return materialContext(materialSources(data as any), `${topic} ${stuck}`, MAX_CONTEXT);
   };
 
   const run = async (next: number) => {

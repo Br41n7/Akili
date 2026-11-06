@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
-import { FIGURE_BUCKET, ownsPath } from '@/lib/figures';
+import { figuresEnabled, FIGURE_BUCKET, ownsPath } from '@/lib/figures';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 /** Delete one saved figure: the stored picture and its row. */
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!figuresEnabled()) return NextResponse.json({ error: 'Figures are switched off for now.' }, { status: 404 });
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return NextResponse.json({ error: 'Please sign in again.' }, { status: 401 });

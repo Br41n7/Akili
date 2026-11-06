@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { callAI, callAIJSON, cn, errorMessage } from '@/lib/utils';
+import { DOC_COLUMNS, materialContext, materialSources } from '@/lib/material-context';
 import ConceptVisual from '@/components/visual/ConceptVisual';
 import { compactLearnerContext, getLearnerContext, recordEvidence } from '@/lib/adaptive';
 import { Brain, MessageSquare, Send } from 'lucide-react';
@@ -42,14 +43,16 @@ export default function AskAI({ projectId, userId, region, persona, onGoToMateri
 
     try {
       const [{ data: docs }, { data: notes }, learner] = await Promise.all([
-        supabase.from('documents').select('content, name').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(4),
+        supabase.from('documents').select(DOC_COLUMNS).eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(30),
         supabase.from('notes').select('content, title').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: false }).limit(8),
         getLearnerContext(projectId, userId),
       ]);
+      // The question picks the relevant parts from ALL the uploaded files (not just the first few pages of the newest ones).
+      const fromFiles = materialContext(materialSources(docs as any), `${text} ${messages.slice(-2).map(m => m.text).join(' ')}`, 7500);
       const context = [
-        ...(docs || []).map(d => `[UPLOADED MATERIAL: ${d.name}]\n${d.content}`),
+        fromFiles,
         ...(notes || []).map(n => `[STUDENT NOTE: ${n.title || 'Untitled note'}]\n${n.content}`),
-      ].join('\n\n').slice(0, 10000);
+      ].filter(Boolean).join('\n\n').slice(0, 10500);
       const adaptive = compactLearnerContext(learner);
       const historyText = messages.slice(-6).map(m => `${m.role === 'user' ? 'Student' : 'Tutor'}: ${m.text}`).join('\n');
 

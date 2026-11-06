@@ -20,6 +20,7 @@ import {
 
 interface Props { projectId: string; userId: string; region: string; onGoToMaterials?: () => void }
 
+import { DOC_COLUMNS, materialContext, materialSources } from '@/lib/material-context';
 const MAX_CONTEXT = 14000;
 const LABEL: Record<ArtifactKind, string> = { study_guide: 'Study guide', slide_deck: 'Slide deck', mind_map: 'Mind map', knowledge_graph: 'Knowledge graph', concept_battle: 'Concept battle', infographic: 'Infographic' };
 const MAKE: Record<ArtifactKind, string> = { study_guide: 'Generate study guide', slide_deck: 'Generate slides', mind_map: 'Generate mind map', knowledge_graph: 'Generate knowledge graph', concept_battle: 'Start a battle', infographic: 'Generate infographic' };
@@ -121,10 +122,9 @@ export function StudyTools({ projectId, userId, region, onGoToMaterials }: Props
   useEffect(load, [projectId, userId]);
 
   const loadContext = async (): Promise<string> => {
-    const { data } = await supabase.from('documents').select('name, content').eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: true });
-    let text = (data || []).map((d: any) => `## ${d.name}\n${d.content || ''}`).join('\n\n');
-    if (text.length > MAX_CONTEXT) text = text.slice(0, MAX_CONTEXT);
-    return text;
+    const { data } = await supabase.from('documents').select(DOC_COLUMNS).eq('project_id', projectId).eq('user_id', userId).order('created_at', { ascending: true }).limit(30);
+    // The topic picks the matching parts from ALL the uploaded files; with no topic, a sample from across them.
+    return materialContext(materialSources(data as any), `${topic} ${topicB}`, MAX_CONTEXT);
   };
 
   const generate = async () => {

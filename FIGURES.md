@@ -20,3 +20,6 @@ Bucket is private; no public URLs. RLS lets a learner select only their own rows
 - Original files are not stored, so figures are found when the learner picks the file.
 - Deleting a whole project or account removes rows but not Storage files. Delete figures first, or purge `figures/<userId>/` in the Supabase dashboard. A scheduled purge is not built.
 - Vision answer quality has not been measured on real figures.
+
+## Switched off for now (phase4m)
+Figures are hidden: the Figures tab appears only when `NEXT_PUBLIC_AKILI_FIGURES=true`, and the routes answer 404 unless `AKILI_FIGURES=true`. Nothing was deleted, and migration 0015 can stay applied. Lessons still get AI-drawn schematic diagrams from a fixed set of shapes, now with a "Something wrong with this diagram?" report button that sends the lesson and diagram type to Admin → Feedback (kind: problem, reference `diagram:<lesson id>`). Searching diagrams online stays for later.

@@ -10,14 +10,14 @@ export type PlanId = 'free' | 'pro';
 export interface PlanLimits {
   daily_ai: number; course_material_chars: number; max_projects: number | null; max_figures: number; max_file_mb: number; daily_image_generations: number; daily_visual_plans: number;
 }
-export interface PlanRow { id: PlanId; name: string; price_kobo: number | null; currency: string; interval: 'month'; active: boolean; features: Feature[]; limits: PlanLimits }
+export interface PlanRow { id: PlanId; name: string; price_kobo: number | null; currency: string; interval: 'month'; active: boolean; features: Feature[]; limits: PlanLimits; }
 export interface SubscriptionRow { user_id: string; plan_id: string; status: string; current_period_end: string | null; source?: string }
 
 export const DEFAULT_PLANS: Record<PlanId, PlanRow> = {
-  free: { id: 'free', name: 'Free', price_kobo: 0, currency: 'NGN', interval: 'month', active: true, features: [],
-    limits: { daily_ai: FREE_DAILY_LIMIT, course_material_chars: 30_000, max_projects: 5, max_figures: 10, max_file_mb: 10, daily_image_generations: 0, daily_visual_plans: 10 } },
+  free: { id: 'free', name: 'Free', price_kobo: 0, currency: 'NGN', interval: 'month', active: true, features: ['custom_tutor_style'],
+    limits: { daily_ai: FREE_DAILY_LIMIT, course_material_chars: 400_000, max_projects: 5, max_figures: 10, max_file_mb: 10, daily_image_generations: 0, daily_visual_plans: 10 } },
   pro: { id: 'pro', name: 'Pro', price_kobo: null, currency: 'NGN', interval: 'month', active: true, features: [...FEATURES],
-    limits: { daily_ai: 200, course_material_chars: 150_000, max_projects: null, max_figures: 200, max_file_mb: 25, daily_image_generations: 20, daily_visual_plans: 100 } },
+    limits: { daily_ai: 200, course_material_chars: 1_000_000, max_projects: null, max_figures: 200, max_file_mb: 25, daily_image_generations: 20, daily_visual_plans: 100 } },
 };
 
 // Bounds an admin may set. Keeps a typo (an extra zero, a negative) from breaking the app or the bill.
@@ -43,7 +43,7 @@ export function normalisePlan(row: any, id: PlanId): PlanRow {
   return {
     id, name: typeof row?.name === 'string' && row.name.trim() ? row.name.trim().slice(0, 40) : d.name,
     price_kobo: id === 'free' ? 0 : price, currency: typeof row?.currency === 'string' && /^[A-Z]{3}$/.test(row.currency) ? row.currency : d.currency, interval: 'month',
-    active: id === 'free' ? true : row?.active !== false, features: Array.isArray(row?.features) ? Array.from(new Set(row.features.filter(isFeature))) : d.features, limits,
+    active: id === 'free' ? true : row?.active !== false, features: id === 'free' ? d.features : Array.isArray(row?.features) ? Array.from(new Set(row.features.filter(isFeature))) : d.features, limits,
   };
 }
 

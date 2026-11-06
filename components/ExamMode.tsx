@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { callAIJSON, cn, errorMessage } from '@/lib/utils';
+import { DOC_COLUMNS, materialContext, materialSources } from '@/lib/material-context';
 import ConceptVisual from '@/components/visual/ConceptVisual';
 import { compactLearnerContext, getLearnerContext, recordEvidence } from '@/lib/adaptive';
 import { Clock, Flag, RotateCcw, ShieldAlert, X } from 'lucide-react';
@@ -41,10 +42,10 @@ export default function ExamMode({ projectId, userId, region, persona, onGoToMat
     setPhase('generating'); setError('');
     try {
       const [{ data: docs }, learner] = await Promise.all([
-        supabase.from('documents').select('content').eq('project_id', projectId).eq('user_id', userId).limit(4),
+        supabase.from('documents').select(DOC_COLUMNS).eq('project_id', projectId).eq('user_id', userId).limit(30),
         getLearnerContext(projectId, userId),
       ]);
-      const context = (docs || []).map(d => d.content).join('\n\n').slice(0, 7000);
+      const context = materialContext(materialSources(docs as any), '', 8000); // an even sample across every uploaded file
       if (!context.trim()) { setError('MATERIALS'); setPhase('intro'); return; }
 
       const adaptive = compactLearnerContext(learner);

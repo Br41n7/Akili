@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { runAIDetailed, runAIJSON, toPublicError, AIServiceError } from '@/lib/ai';
+import { isDeepOutline } from '@/lib/course-guard';
 import { getValidator, VALIDATION_TYPES } from '@/lib/ai-schemas';
 import { getTask, isKnownTask, PERSONA_IDS } from '@/lib/ai-tasks';
 import { planQuota, recordUsage } from '@/lib/ai-quota';
@@ -91,6 +92,8 @@ export async function POST(req: NextRequest) {
     const usedToday = usage?.count ?? 0;
     const userPlan = await loadUserPlan(supabaseAdmin, user.id); // the allowance comes from the learner's plan (editable by an admin)
     const dailyLimit = userPlan.plan.limits.daily_ai;
+    // Deep courses are a plan feature. The browser plans the course, so the server reads the size the outline asks for.
+    if (isDeepOutline(task, prompt) && !planCapabilities(userPlan.plan).has('deep_courses')) return fail('Deep courses are part of the Pro plan. Choose Quick or Standard.', 403, 'PLAN_REQUIRED');
     const quota = planQuota({ usedToday, hasOwnKey, limit: dailyLimit });
     const limitMessage = userPlan.id === 'pro' ? `You have used all ${dailyLimit} AI requests for today. They reset at midnight.` : `You have used all ${dailyLimit} free AI requests for today. They reset at midnight. Pro gives you more.`;
     if (!quota.allow) return fail(limitMessage, 429, 'DAILY_LIMIT');

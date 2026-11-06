@@ -8,6 +8,7 @@ import { readStoredVisual, type StoredVisual } from '@/lib/visual/lesson';
 import { requestLessonVisual, shouldConsiderVisual } from '@/lib/visual/planner';
 import { recordVisualAnswer, weakConceptsForLesson } from '@/lib/visual/adaptive';
 import VisualRenderer from './VisualRenderer';
+import ReportDiagram from '@/components/ReportDiagram';
 
 interface Props {
   lesson: any;
@@ -71,6 +72,7 @@ export default function LessonVisual({ lesson, projectId, userId, region, person
   const shown = stored?.status === 'ready' ? stored.spec : curated;
   if (shown) {
     return (
+      <>
       <VisualRenderer
         visualSpec={shown}
         ai={{ projectId, region, persona, userGroqKey }}
@@ -85,6 +87,8 @@ export default function LessonVisual({ lesson, projectId, userId, region, person
           setSimplifying(false);
         }}
       />
+      <ReportDiagram lessonId={lesson.id} lessonTitle={lesson.title} diagramType={(shown as any)?.visual_type} />
+      </>
     );
   }
 

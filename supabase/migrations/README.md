@@ -21,5 +21,6 @@ Back up the database first. Files `0002` onward are written to be re-runnable.
 | 0014_custom_tutor_style_and_region.sql | Custom tutor style (Pro) and a global default country |
 | 0015_figures.sql | Figures from your own materials: table, private `figures` bucket, `max_figures` plan limit |
 | 0016_large_uploads.sql | Temporary private bucket for files over 4 MB, plus the `max_file_mb` plan limit |
+| 0017_whole_material_courses.sql | Raises the course reading bound (Free 400k, Pro 1M characters) |
 
 `o.sql` was removed: every statement in it already exists in `0002_adaptive.sql`.
