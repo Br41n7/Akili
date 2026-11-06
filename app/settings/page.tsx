@@ -9,9 +9,11 @@ import PersonaPicker from '@/components/PersonaPicker';
 import ReminderSettings from '@/components/ReminderSettings';
 import PlanCard from '@/components/PlanCard';
 import FeedbackForm from '@/components/FeedbackForm';
+import { LanguagePicker, useT } from '@/components/I18n';
 
 export default function SettingsPage() {
   const router = useRouter();
+  const { t } = useT();
   const [profile, setProfile] = useState<any>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
 
@@ -36,12 +38,12 @@ export default function SettingsPage() {
       <header className="pt-safe sticky top-0 z-40 border-b border-rule bg-chalk/95 backdrop-blur">
         <div className="mx-auto flex h-14 max-w-xl items-center gap-1 px-2">
           <Link href="/projects" aria-label="Back to projects" className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-ink/5"><ArrowLeft size={20} /></Link>
-          <h1 className="text-[17px] font-bold">Settings</h1>
+          <h1 className="text-[17px] font-bold">{t('common.settings')}</h1>
         </div>
       </header>
       <main className="mx-auto max-w-xl space-y-4 p-4">
         {status === 'loading' && <><Skeleton className="h-40 w-full" /><Skeleton className="h-40 w-full" /></>}
-        {status === 'error' && <ErrorState message="Your settings did not load. Check your connection and try again." onRetry={load} />}
+        {status === 'error' && <ErrorState message={t('settings.loadError')} onRetry={load} />}
         {status === 'ready' && (
           <>
             <PlanCard />
@@ -51,12 +53,13 @@ export default function SettingsPage() {
                 <Link href="/admin/feedback" className="block rounded-2xl border border-rule bg-paper p-4 text-sm font-bold">Admin: feedback</Link>
               </div>
             )}
+            <Surface className="p-4"><LanguagePicker /></Surface>
             <Surface className="space-y-3 p-4">
-              <div><h2 className="text-base font-bold">Tutor style</h2><p className="text-sm text-muted">How Akili talks to you in explanations, chat and feedback.</p></div>
+              <div><h2 className="text-base font-bold">{t('settings.tutorStyle')}</h2><p className="text-sm text-muted">{t('settings.tutorStyleDesc')}</p></div>
               <PersonaPicker initial={profile?.persona} initialStyle={profile?.custom_tutor_style} />
             </Surface>
             <Surface className="space-y-3 p-4">
-              <h2 className="text-base font-bold">Study reminders</h2>
+              <h2 className="text-base font-bold">{t('settings.reminders')}</h2>
               <ReminderSettings enabled={!!profile?.reminders_enabled} hour={profile?.reminder_hour ?? 18} />
             </Surface>
           <FeedbackForm />

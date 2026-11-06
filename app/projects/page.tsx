@@ -1,4 +1,5 @@
 'use client';
+import { useT } from '@/components/I18n';
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -11,6 +12,7 @@ import { levelLabel, levelOf, projectChips, projectSubject, type ProjectRecord }
 import { formatDate } from '@/lib/utils';
 
 export default function ProjectsPage() {
+  const { t } = useT();
   const router = useRouter();
   const [projects, setProjects] = useState<ProjectRecord[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -53,16 +55,16 @@ export default function ProjectsPage() {
         <div className="mx-auto flex h-14 max-w-3xl items-center justify-between px-4">
           <Wordmark />
           <div className="flex items-center gap-1">
-            <Button className="hidden sm:inline-flex" size="sm" onClick={() => setShowNew(true)}><Plus size={16} /> New project</Button>
-            <Link href="/settings" aria-label="Settings" className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-ink/5 active:bg-ink/10"><Settings size={19} /></Link>
-            <IconButton label="Sign out" onClick={signOut}><LogOut size={19} /></IconButton>
+            <Button className="hidden sm:inline-flex" size="sm" onClick={() => setShowNew(true)}><Plus size={16} /> {t('projects.new')}</Button>
+            <Link href="/settings" aria-label={t('common.settings')} className="flex h-11 w-11 items-center justify-center rounded-xl hover:bg-ink/5 active:bg-ink/10"><Settings size={19} /></Link>
+            <IconButton label={t('projects.signOut')} onClick={signOut}><LogOut size={19} /></IconButton>
           </div>
         </div>
       </header>
 
       <main className="mx-auto max-w-3xl space-y-5 px-4 pt-6">
         <div>
-          <h1 className="text-[1.75rem] font-extrabold leading-tight tracking-tight">Your projects</h1>
+          <h1 className="text-[1.75rem] font-extrabold leading-tight tracking-tight">{t('projects.title')}</h1>
           <p className="mt-1 text-sm text-muted">One project for each subject or course you are working on.</p>
         </div>
 
@@ -74,7 +76,7 @@ export default function ProjectsPage() {
           <EmptyState
             icon={<BookOpen size={22} />}
             title="Start your first project"
-            action={<Button onClick={() => setShowNew(true)}><Plus size={17} /> New project</Button>}
+            action={<Button onClick={() => setShowNew(true)}><Plus size={17} /> {t('projects.new')}</Button>}
           >
             Pick your level, add your notes, and Akili builds lessons, quizzes and mock exams from them.
           </EmptyState>
@@ -130,7 +132,7 @@ export default function ProjectsPage() {
 
       {status === 'ready' && projects.length > 0 && (
         <div className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-chalk/95 p-3 backdrop-blur sm:hidden">
-          <Button block onClick={() => setShowNew(true)}><Plus size={18} /> New project</Button>
+          <Button block onClick={() => setShowNew(true)}><Plus size={18} /> {t('projects.new')}</Button>
         </div>
       )}
 

@@ -127,7 +127,7 @@ export default function NewProjectSheet({ open, onClose, onCreated }: Props) {
         setProgress(`Uploading ${i + 1} of ${files.length}…`);
         try {
           if (!user) throw new Error('Please sign in again.');
-          await uploadDocument(files[i], project.id, user.id);
+          await uploadDocument(files[i], project.id, user.id, { language: typeof document !== 'undefined' ? document.documentElement.lang || 'en' : 'en', onStatus: m => toast.loading(m, { id: 'scan' }), onNote: n => { toast.dismiss('scan'); toast(n, { duration: 9000 }); } });
         } catch (err) {
           failed.push(`${files[i].name}: ${errorMessage(err, 'upload failed')}`);
         }

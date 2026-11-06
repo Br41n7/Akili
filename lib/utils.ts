@@ -1,4 +1,5 @@
 import { clsx, type ClassValue } from 'clsx';
+import { readLang } from '@/lib/i18n/core';
 import { twMerge } from 'tailwind-merge';
 
 export function cn(...inputs: ClassValue[]) {
@@ -27,7 +28,7 @@ export async function callAI(body: object): Promise<string> {
     const res = await fetch('/api/ai/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ language: readLang(), ...body }),
       signal: controller.signal,
     });
     const data = await res.json().catch(() => null);

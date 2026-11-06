@@ -1,3 +1,4 @@
+import { I18nProvider } from '@/components/I18n';
 import type { Metadata, Viewport } from 'next';
 import { Bricolage_Grotesque, Source_Serif_4 } from 'next/font/google';
 import './globals.css';
@@ -34,7 +35,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           containerStyle={{ top: 'calc(env(safe-area-inset-top) + 8px)' }}
           toastOptions={{ style: { background: '#16204A', color: '#fff', fontSize: '14px', borderRadius: '12px' }, duration: 3500 }}
         />
-        {children}
+        <I18nProvider>{children}</I18nProvider>
         <PWA />
       </body>
     </html>

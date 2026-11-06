@@ -26,6 +26,8 @@ import PlanView from '@/components/PlanView';
 import ResearchLab from '@/components/ResearchLab';
 import QuickNoteModal from '@/components/QuickNoteModal';
 import ProjectSidebar from '@/components/ProjectSidebar';
+import { useT } from '@/components/I18n';
+import type { MessageKey } from '@/lib/i18n/messages';
 
 type Tab = 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'study' | 'help' | 'snap' | 'ask' | 'analysis' | 'progress' | 'research' | 'plan' | 'figures';
 
@@ -55,6 +57,7 @@ export default function ProjectPage() {
   const params = useParams();
   const router = useRouter();
   const projectId = params.id as string;
+  const { t: tr } = useT();
 
   const [project, setProject] = useState<ProjectRecord | null>(null);
   const [user, setUser] = useState<{ id: string } | null>(null);
@@ -121,13 +124,14 @@ export default function ProjectPage() {
   const region = profile?.region || 'Other';
   const persona = profile?.persona || 'friendly';
   const isPrimary = PRIMARY.includes(tab);
-  const active = TABS.find(t => t.id === tab)!;
+  const L = TABS.map(t => ({ ...t, label: tr(`tab.${t.id}` as MessageKey) === `tab.${t.id}` ? t.label : tr(`tab.${t.id}` as MessageKey), desc: tr(`tabdesc.${t.id}` as MessageKey) === `tabdesc.${t.id}` ? t.desc : tr(`tabdesc.${t.id}` as MessageKey) }));
+  const active = L.find(t => t.id === tab)!;
   const chips = projectChips(project);
   const subject = projectSubject(project);
 
   return (
     <div className="flex min-h-dvh">
-      <ProjectSidebar items={TABS} active={tab} onSelect={setTab} projectName={project.name} />
+      <ProjectSidebar items={L} active={tab} onSelect={setTab} projectName={project.name} />
       <div className="flex min-h-dvh min-w-0 flex-1 flex-col">
       <header className="pt-safe sticky top-0 z-40 border-b border-rule bg-paper">
         <div className="mx-auto flex h-14 max-w-3xl items-center gap-1 px-2">
@@ -145,7 +149,7 @@ export default function ProjectPage() {
 
         {/* Tablet and desktop: every tab in one row */}
         <nav aria-label="Project sections" className="no-scrollbar mx-auto hidden max-w-3xl gap-1 overflow-x-auto px-3 pb-2 md:flex lg:hidden">
-          {TABS.map(t => (
+          {L.map(t => (
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
@@ -191,7 +195,7 @@ export default function ProjectPage() {
       <nav aria-label="Project sections" className="pb-safe fixed inset-x-0 bottom-0 z-40 border-t border-rule bg-paper md:hidden">
         <ul className="mx-auto grid max-w-3xl grid-cols-5">
           {PRIMARY.map(id => {
-            const t = TABS.find(x => x.id === id)!;
+            const t = L.find(x => x.id === id)!;
             const on = tab === id;
             return (
               <li key={id}>
@@ -209,7 +213,7 @@ export default function ProjectPage() {
               <span className={cn('flex h-7 w-12 items-center justify-center rounded-full', !isPrimary && 'bg-marker')}>
                 <MoreHorizontal size={20} strokeWidth={!isPrimary ? 2.5 : 2} />
               </span>
-              <span className={cn('text-[11px]', !isPrimary ? 'font-bold text-ink' : 'font-medium text-muted')}>More</span>
+              <span className={cn('text-[11px]', !isPrimary ? 'font-bold text-ink' : 'font-medium text-muted')}>{tr('common.more')}</span>
             </button>
           </li>
         </ul>
@@ -219,11 +223,11 @@ export default function ProjectPage() {
         <div className="fixed inset-0 z-[60] flex items-end bg-ink/50 animate-fade md:hidden" onClick={() => setMoreOpen(false)}>
           <div role="dialog" aria-modal="true" aria-label="More sections" onClick={e => e.stopPropagation()} className="pb-safe w-full animate-sheet rounded-t-3xl bg-paper p-3">
             <div className="flex items-center justify-between px-2 pb-1 pt-1">
-              <h2 className="text-base font-bold">More</h2>
+              <h2 className="text-base font-bold">{tr('common.more')}</h2>
               <IconButton label="Close" onClick={() => setMoreOpen(false)}><X size={20} /></IconButton>
             </div>
             <ul>
-              {TABS.filter(t => !PRIMARY.includes(t.id)).map(t => (
+              {L.filter(t => !PRIMARY.includes(t.id)).map(t => (
                 <li key={t.id}>
                   <button onClick={() => { setTab(t.id); setMoreOpen(false); }} className="flex min-h-14 w-full items-center gap-3 rounded-xl px-2 text-left active:bg-chalk">
                     <span className={cn('flex h-10 w-10 items-center justify-center rounded-xl', tab === t.id ? 'bg-marker' : 'bg-chalk')}><t.icon size={19} /></span>

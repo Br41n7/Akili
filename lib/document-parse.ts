@@ -1,5 +1,7 @@
 import { decodeEntities, stripTags } from '@/lib/text-safe';
 import { runAI } from '@/lib/ai';
+import { chunkText, cleanText } from '@/lib/text-chunks';
+export { chunkText, cleanText };
 
 /** Thrown with a message that is safe to show the learner. */
 export class ParseError extends Error { constructor(message: string, public status = 422) { super(message); } }
@@ -25,27 +27,6 @@ export function renderPageWithNumber(pageData: any): Promise<string> {
     for (const item of content.items) { if (lastY === item.transform[5] || lastY === undefined) text += item.str; else text += '\n' + item.str; lastY = item.transform[5]; }
     return `[Page ${pageData.pageNumber ?? (pageData.pageIndex ?? 0) + 1}]\n${text}`;
   });
-}
-
-export function cleanText(text: string): string {
-  return text
-    .replace(/\(cid:\d+\)/gi, ' ')
-    .replace(/[ﬁﬂﬃﬄ]/g, m => ({ ﬁ: 'fi', ﬂ: 'fl', ﬃ: 'ffi', ﬄ: 'ffl' }[m] || m))
-    .replace(/[�﻿​-‍]/g, '')
-    .replace(/\u0000/g, '')
-    .replace(/(\b[a-zA-Z]+)-\s*\n\s*([a-zA-Z]+\b)/g, '$1$2')
-    .replace(/[ \t]+/g, ' ')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-export function chunkText(text: string): string[] {
-  const chunks: string[] = []; let current = '';
-  for (const para of text.split(/\n{2,}/)) {
-    if ((current + para).length > 2000 && current) { chunks.push(current.trim()); current = para; } else current += '\n\n' + para;
-  }
-  if (current.trim()) chunks.push(current.trim());
-  return chunks;
 }
 
 /** Reads one uploaded file (already in memory) and returns clean text, a 12,000-character preview and chunks. */

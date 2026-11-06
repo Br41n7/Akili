@@ -1,4 +1,6 @@
 'use client';
+import { continueLabel, endsModule } from '@/lib/course-nav';
+import { useT } from '@/components/I18n';
 import { addLesson, saveCompletedLessons } from '@/lib/course-progress';
 import { usePlan } from '@/lib/use-plan';
 import LessonRating from '@/components/LessonRating';
@@ -37,6 +39,7 @@ const STEPS = [
 ];
 
 export default function CourseView({ projectId, userId, region, persona, userGroqKey, onGoToMaterials }: Props) {
+  const { t: tr } = useT();
   const [course, setCourse] = useState<any>(null);
   const [project, setProject] = useState<ProjectRecord | null>(null);
   const [progress, setProgress] = useState<{ completed_lessons: string[] }>({ completed_lessons: [] });
@@ -422,12 +425,12 @@ export default function CourseView({ projectId, userId, region, persona, userGro
 
         <div className="space-y-2 pt-2">
           <Button block variant={isDone ? 'quiet' : 'primary'} disabled={isDone} onClick={() => markComplete(active.id)}>
-            <CheckCircle2 size={18} /> {isDone ? 'Lesson completed' : 'Mark as complete'}
+            <CheckCircle2 size={18} /> {isDone ? tr('course.completed') : tr('course.markComplete')}
           </Button>
           {isDone && <LessonRating lessonId={active.id} page="/course" />}
           <div className="grid grid-cols-2 gap-2">
-            <Button variant="quiet" disabled={!prev} onClick={() => prev && openLesson(prev.id)}><ArrowLeft size={16} /> Previous</Button>
-            <Button variant="dark" disabled={!next} onClick={() => next && openLesson(next.id)}>Next <ArrowRight size={16} /></Button>
+            <Button variant="quiet" disabled={!prev} onClick={() => prev && openLesson(prev.id)}><ArrowLeft size={16} /> {tr('course.previous')}</Button>
+            <Button variant="dark" disabled={!next} onClick={() => { if (!next) return; if (endsModule(lessons, activeIndex) && next.moduleId) setOpenModule(next.moduleId); openLesson(next.id); }}>{endsModule(lessons, activeIndex) ? tr('course.nextModule') : tr('course.next')} <ArrowRight size={16} /></Button>
           </div>
         </div>
       </article>
@@ -441,7 +444,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
   return (
     <div className="space-y-4 p-4">
       <Surface className="bg-ink p-5 text-white">
-        <p className="text-xs font-semibold uppercase tracking-wide text-marker">Your course</p>
+        <p className="text-xs font-semibold uppercase tracking-wide text-marker">{tr('course.yourCourse')}</p>
         <h2 className="mt-1 text-2xl font-extrabold leading-tight">{course.title}</h2>
         {course.description && <p className="mt-2 text-sm leading-relaxed text-white/75">{course.description}</p>}
         <div className="mt-4">
@@ -449,8 +452,8 @@ export default function CourseView({ projectId, userId, region, persona, userGro
           <ProgressBar value={pct} label="Course progress" className="bg-white/20 [&>div]:bg-marker" />
         </div>
         {firstOpen && (
-          <Button block className="mt-4 bg-marker text-ink hover:bg-marker/90 active:bg-marker/90" onClick={() => openLesson(firstOpen.id)}>
-            {done.length ? 'Continue learning' : 'Start first lesson'} <ArrowRight size={17} />
+          <Button block className="mt-4 bg-marker text-ink hover:bg-marker/90 active:bg-marker/90" onClick={() => { if (firstOpen.moduleId) setOpenModule(firstOpen.moduleId); openLesson(firstOpen.id); }}>
+            {tr(({ 'Start first lesson': 'course.start', 'Continue learning': 'course.continue', 'Next module': 'course.nextModule' } as const)[continueLabel(lessons, done)])} <ArrowRight size={17} />
           </Button>
         )}
       </Surface>

@@ -4,6 +4,9 @@ import { supabase } from '@/lib/supabase';
 export const MAX_FILE_BYTES = 50 * 1024 * 1024;
 import { ALLOWED_EXTENSIONS, extensionOf, withExtension } from '@/lib/file-types';
 import { needsDirectUpload } from '@/lib/large-upload';
+import { chunkText } from '@/lib/text-chunks';
+import { dbSafe } from '@/lib/text-safe';
+import { ocrNote } from '@/lib/scan-ocr';
 export { ALLOWED_EXTENSIONS, extensionOf, isInAppBrowser, withExtension } from '@/lib/file-types';
 // Extensions AND media types. Some phones and in-app browsers only offer a proper file picker when they are given media types.
 export const ACCEPTED_TYPES = [
@@ -41,11 +44,40 @@ export function uploadFailureNote(status: number): string {
  * Reads a PDF/TXT file on the server, then saves it as a document in the project.
  * Throws an Error whose message is safe to show to the learner.
  */
-export async function uploadDocument(file: File, projectId: string, userId: string) {
+export interface UploadOptions {
+  /** Called with a short progress line while a scanned PDF is being read. */
+  onStatus?: (message: string) => void;
+  /** Called once after a scanned PDF is read, with a sentence about how well it went. */
+  onNote?: (note: string) => void;
+  signal?: AbortSignal;
+  /** Interface language code, used to pick the text-recognition language for scans. */
+  language?: string;
+}
+
+const isPdf = (f: File) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name);
+
+/** Scanned PDFs are read in the browser. Returns null for normal PDFs (and on any failure), so the usual server path runs. */
+async function readScanned(file: File, o: UploadOptions): Promise<{ name: string; content: string; chunks: string[] } | null> {
+  if (!isPdf(file)) return null;
+  let scan: typeof import('@/lib/scan-browser');
+  try { scan = await import('@/lib/scan-browser'); } catch { return null; }
+  const probe = await scan.probePdf(file);
+  if (!probe.scanned) return null;
+  o.onStatus?.('This PDF is scanned pictures. Reading the pages…');
+  const result = await scan.ocrPdf(file, { langs: scan.ocrLanguages(o.language || 'en'), signal: o.signal, onProgress: (d, t) => o.onStatus?.(`Reading scanned pages ${Math.min(d + 1, t)} of ${t}…`) });
+  if (!result.text.trim()) throw new Error(result.cancelled ? 'Stopped before any page was read.' : 'No text could be read from those scanned pages. Make sure the scan is straight and clear, or upload a clearer copy.');
+  o.onNote?.(ocrNote(result));
+  return { name: file.name, content: result.text.slice(0, 12000), chunks: chunkText(result.text) };
+}
+
+export async function uploadDocument(file: File, projectId: string, userId: string, options: UploadOptions = {}) {
   file = withExtension(file);
   const problem = checkFile(file);
   if (problem) throw new Error(problem);
 
+  const scanned = await readScanned(file, options);
+  let data: { name?: string; content: string; chunks: string[] } | null = scanned;
+  if (!data) {
   let res: Response;
   try {
     if (needsDirectUpload(file.size)) {
@@ -65,12 +97,15 @@ export async function uploadDocument(file: File, projectId: string, userId: stri
   } catch (e: any) {
     throw new Error(e?.message && !/fetch|network/i.test(e.message) ? e.message : 'You seem to be offline. Check your connection and try again.');
   }
-  const data = await res.json().catch(() => null);
-  if (!res.ok || !data) throw new Error(data?.error || uploadFailureNote(res.status));
+  const body = await res.json().catch(() => null);
+  if (!res.ok || !body) throw new Error(body?.error || uploadFailureNote(res.status));
+  data = body;
+  }
+  if (!data) throw new Error('That file could not be processed.');
 
   const { data: doc, error } = await supabase
     .from('documents')
-    .insert({ project_id: projectId, user_id: userId, name: data.name || file.name, content: data.content, chunks: data.chunks, source_type: 'upload' })
+    .insert({ project_id: projectId, user_id: userId, name: data.name || file.name, content: dbSafe(data.content), chunks: dbSafe(data.chunks), source_type: 'upload' })
     .select()
     .single();
   if (error || !doc) throw new Error('The file was read but could not be saved. Please try again.');

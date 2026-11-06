@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useT } from '@/components/I18n';
 import { supabase } from '@/lib/supabase';
 import { ArrowRight, BarChart3, BookOpen, FileUp, GraduationCap, HelpCircle, MessageSquare, RotateCcw, School, ShieldAlert, Sparkles } from 'lucide-react';
 import { Chip, OptionRow, PageSpinner, Wordmark, buttonClasses, type OptionState } from '@/components/ui';
@@ -92,6 +93,7 @@ function SectionTitle({ children, sub }: { children: React.ReactNode; sub?: stri
 /* ───────────────────────── Page ───────────────────────── */
 
 export default function Home() {
+  const { t } = useT();
   const router = useRouter();
   const [checking, setChecking] = useState(true);
 
@@ -111,7 +113,7 @@ export default function Home() {
         <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
           <Link href="/" aria-label="Akili home"><Wordmark /></Link>
           <nav aria-label="Account" className="flex items-center gap-1">
-            <Link href="/auth/login" className={cn(buttonClasses('ghost', 'sm'))}>Sign in</Link>
+            <Link href="/auth/login" className={cn(buttonClasses('ghost', 'sm'))}>{t('common.signIn')}</Link>
             <Link href="/auth/signup" className={cn(buttonClasses('primary', 'sm'))}>Start free</Link>
           </nav>
         </div>

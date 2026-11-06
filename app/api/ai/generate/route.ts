@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { languageInstruction } from '@/lib/i18n/server';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -35,6 +36,7 @@ const bodySchema = z.object({
   task: z.string().trim().min(1).max(40),
   prompt: z.string().min(1, 'Prompt is required').max(MAX_PROMPT_CHARS, `Prompt too large. Maximum ${MAX_PROMPT_CHARS} characters.`),
   systemInstruction: z.string().max(4000).optional().default(''),
+  language: z.string().max(8).optional().default('en'),
   format: z.enum(['json', 'text']).optional().default('text'),
   persona: z.string().max(300).optional().default('friendly'),
   region: z.string().max(60).optional().default('Nigeria'),
@@ -70,7 +72,7 @@ export async function POST(req: NextRequest) {
     try { raw = await req.json(); } catch { return fail('That request could not be read.', 400); }
     const parsed = bodySchema.safeParse(raw);
     if (!parsed.success) return fail(parsed.error.issues[0]?.message || 'Invalid request.', 400);
-    const { task, prompt, systemInstruction, format, persona: personaInput, region, image, userGroqKey, validationType: requestedValidation, projectId } = parsed.data;
+    const { task, prompt, systemInstruction, format, persona: personaInput, region, image, userGroqKey, validationType: requestedValidation, projectId, language: languageInput } = parsed.data;
 
     // Only tasks in the registry run, and each task says whether it takes an image.
     if (!isKnownTask(task)) return fail('That request is not supported.', 400, 'UNKNOWN_TASK');
@@ -116,6 +118,7 @@ export async function POST(req: NextRequest) {
       customStyle ? customStyleInstruction(customStyle) : (PERSONAS[persona] || persona),
       projectBlock,
       buildCulturalBlock(region, (profile as any)?.region_context || {}),
+      languageInstruction(languageInput),
       systemInstruction,
     ].filter(Boolean).join('\n\n');
 
