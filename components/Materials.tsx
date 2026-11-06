@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { FileText, Link2, Plus, StickyNote, Trash2, Upload, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useT } from '@/components/I18n';
 import { errorMessage } from '@/lib/utils';
 import { ACCEPTED_TYPES, uploadDocument } from '@/lib/upload-document';
 import UploadHelp from '@/components/UploadHelp';
@@ -14,6 +15,7 @@ interface Props { projectId: string; userId: string }
 type Tab = 'docs' | 'notes';
 
 export default function Materials({ projectId, userId }: Props) {
+  const { t } = useT();
   const { caps } = usePlan();
   const [scanStatus, setScanStatus] = useState('');
   const abortRef = useRef(new AbortController());
@@ -62,7 +64,7 @@ export default function Materials({ projectId, userId }: Props) {
         toast.error(errorMessage(err, `${file.name} could not be uploaded.`));
       }
     }
-    if (added > 0) toast.success(added === 1 ? 'Document uploaded' : `${added} documents uploaded`);
+    if (added > 0) toast.success(added === 1 ? t('mat.uploaded1') : t('mat.uploadedN', { n: added }));
     setUploading(false); setScanStatus('');
   };
 
@@ -82,7 +84,7 @@ export default function Materials({ projectId, userId }: Props) {
 
       setDocs(p => [doc, ...p]);
       setImportUrl('');
-      toast.success('Page imported');
+      toast.success(t('mat.imported'));
     } catch (err) {
       toast.error(errorMessage(err, 'Import failed. Please try again.'));
     } finally {
@@ -112,13 +114,13 @@ export default function Materials({ projectId, userId }: Props) {
   return (
     <div className="mx-auto max-w-2xl space-y-4 p-4">
       <Segmented<Tab>
-        label="Materials view"
+        label={t('mat.view')}
         value={tab}
         onChange={setTab}
-        options={[{ value: 'docs', label: `Documents (${docs.length})` }, { value: 'notes', label: `Notes (${notes.length})` }]}
+        options={[{ value: 'docs', label: t('mat.documents', { n: docs.length }) }, { value: 'notes', label: t('mat.notes', { n: notes.length }) }]}
       />
 
-      {status === 'error' && <ErrorState message="Your materials did not load. Check your connection and try again." onRetry={load} />}
+      {status === 'error' && <ErrorState message={t('mat.loadError')} onRetry={load} />}
 
       {tab === 'docs' && status !== 'error' && (
         <div className="space-y-3">
@@ -128,20 +130,20 @@ export default function Materials({ projectId, userId }: Props) {
             <div {...drop.handlers}>
             <Button variant="quiet" block loading={uploading} onClick={() => fileRef.current?.click()} className={`min-h-24 flex-col gap-1.5 border-2 border-dashed ${drop.over ? 'border-biro bg-biro-wash' : ''}`}>
               <Upload size={22} />
-              <span>{uploading ? 'Processing…' : 'Upload PDF, Word, PPT, Image, or TXT files'}</span>
-              <span className="text-xs font-normal text-muted">{scanStatus ? scanStatus : drop.over ? 'Drop to upload' : `Up to ${caps.limits.maxFileMb} MB per file. On a computer you can also drag files here.`}</span>
+              <span>{uploading ? t('mat.processing') : t('mat.upload')}</span>
+              <span className="text-xs font-normal text-muted">{scanStatus ? scanStatus : drop.over ? t('mat.drop') : t('mat.limit', { mb: caps.limits.maxFileMb })}</span>
             </Button>
-            {scanStatus && <Button variant="ghost" block onClick={() => abortRef.current.abort()}>Stop reading scanned pages (keeps what was read)</Button>}
+            {scanStatus && <Button variant="ghost" block onClick={() => abortRef.current.abort()}>{t('mat.stopScan')}</Button>}
             </div>
             <div className="flex gap-2">
-              <TextInput value={importUrl} onChange={e => setImportUrl(e.target.value)} placeholder="Paste a Google Docs, Google Slides, or webpage link" onKeyDown={e => e.key === 'Enter' && importFromUrl()} />
-              <Button loading={importing} disabled={!importUrl.trim()} onClick={importFromUrl}><Link2 size={16} /> Import</Button>
+              <TextInput value={importUrl} onChange={e => setImportUrl(e.target.value)} placeholder={t('mat.pasteLink')} onKeyDown={e => e.key === 'Enter' && importFromUrl()} />
+              <Button loading={importing} disabled={!importUrl.trim()} onClick={importFromUrl}><Link2 size={16} /> {t('mat.import')}</Button>
             </div>
           <UploadHelp onPhoto={() => photoRef.current?.click()} onNotes={() => setTab('notes')} />
           </Surface>
 
           {status === 'loading' && <ListSkeleton rows={2} />}
-          {status === 'ready' && docs.length === 0 && <EmptyState icon={<FileText size={22} />} title="No documents yet">Upload your notes or import a page to get started.</EmptyState>}
+          {status === 'ready' && docs.length === 0 && <EmptyState icon={<FileText size={22} />} title={t('mat.noDocs')}>{t('mat.noDocsHint')}</EmptyState>}
           {status === 'ready' && docs.length > 0 && (
             <ul className="space-y-2">
               {docs.map(doc => (
@@ -152,7 +154,7 @@ export default function Materials({ projectId, userId }: Props) {
                       <p className="truncate text-sm font-semibold">{doc.name}</p>
                       <p className="text-xs capitalize text-muted">{doc.source_type} · {new Date(doc.created_at).toLocaleDateString()}</p>
                     </div>
-                    <IconButton label={`Delete ${doc.name}`} onClick={() => setDeleteTarget({ kind: 'doc', id: doc.id, label: doc.name })}><Trash2 size={16} /></IconButton>
+                    <IconButton label={t('mat.deleteDoc', { name: doc.name })} onClick={() => setDeleteTarget({ kind: 'doc', id: doc.id, label: doc.name })}><Trash2 size={16} /></IconButton>
                   </Surface>
                 </li>
               ))}
@@ -164,19 +166,19 @@ export default function Materials({ projectId, userId }: Props) {
       {tab === 'notes' && status !== 'error' && (
         <div className="space-y-3">
           <Surface className="flex items-end gap-2 p-3">
-            <TextArea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder="Write a note" rows={2} className="border-0 px-1 focus:ring-0" onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) addNote(); }} />
-            <IconButton label="Add note" onClick={addNote} disabled={!newNote.trim()} className="mb-1 shrink-0 bg-biro text-white hover:bg-biro-dark disabled:opacity-40"><Plus size={17} /></IconButton>
+            <TextArea value={newNote} onChange={e => setNewNote(e.target.value)} placeholder={t('mat.writeNote')} rows={2} className="border-0 px-1 focus:ring-0" onKeyDown={e => { if (e.key === 'Enter' && e.ctrlKey) addNote(); }} />
+            <IconButton label={t('mat.addNote')} onClick={addNote} disabled={!newNote.trim()} className="mb-1 shrink-0 bg-biro text-white hover:bg-biro-dark disabled:opacity-40"><Plus size={17} /></IconButton>
           </Surface>
 
           {status === 'loading' && <ListSkeleton rows={2} />}
-          {status === 'ready' && notes.length === 0 && <EmptyState icon={<StickyNote size={22} />} title="No notes yet">Jot down anything worth remembering.</EmptyState>}
+          {status === 'ready' && notes.length === 0 && <EmptyState icon={<StickyNote size={22} />} title={t('mat.noNotes')}>{t('mat.noNotesHint')}</EmptyState>}
           {status === 'ready' && notes.length > 0 && (
             <ul className="space-y-2">
               {notes.map(note => (
                 <li key={note.id}>
                   <Surface className="flex gap-3 p-3.5">
                     <p className="flex-1 font-read text-[15px] leading-relaxed">{note.content}</p>
-                    <IconButton label="Delete note" onClick={() => setDeleteTarget({ kind: 'note', id: note.id, label: 'this note' })} className="h-9 w-9 shrink-0"><X size={15} /></IconButton>
+                    <IconButton label={t('mat.deleteNote')} onClick={() => setDeleteTarget({ kind: 'note', id: note.id, label: 'this note' })} className="h-9 w-9 shrink-0"><X size={15} /></IconButton>
                   </Surface>
                 </li>
               ))}
@@ -187,9 +189,9 @@ export default function Materials({ projectId, userId }: Props) {
 
       <ConfirmDialog
         open={!!deleteTarget}
-        title={deleteTarget?.kind === 'doc' ? `Delete "${deleteTarget.label}"?` : 'Delete this note?'}
-        body="This cannot be undone."
-        confirmLabel="Delete"
+        title={deleteTarget?.kind === 'doc' ? t('mat.confirmDoc', { name: deleteTarget.label }) : t('mat.confirmNote')}
+        body={t('common.cannotUndo')}
+        confirmLabel={t('common.delete')}
         danger
         onConfirm={confirmDelete}
         onCancel={() => setDeleteTarget(null)}

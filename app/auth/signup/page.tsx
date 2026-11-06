@@ -5,10 +5,12 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { GraduationCap, Eye, EyeOff, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useT, LanguageSwitch } from '@/components/I18n';
 
 import { REGION_OPTIONS as REGIONS } from '@/lib/cultural';
 
 function SignupForm() {
+  const { t } = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [form, setForm] = useState({
@@ -26,7 +28,7 @@ function SignupForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (form.password.length < 8) { toast.error('Password must be at least 8 characters'); return; }
+    if (form.password.length < 8) { toast.error(t('auth.pwShort')); return; }
     setLoading(true);
 
     try {
@@ -42,7 +44,7 @@ function SignupForm() {
         await supabase.from('profiles').update({ region: form.region }).eq('id', data.user.id);
       }
 
-      toast.success('Account created! Check your email to confirm.');
+      toast.success(t('auth.created'));
 
       // If coming from PastQ import, redirect there
       if (form.bank_id) {
@@ -51,7 +53,7 @@ function SignupForm() {
         router.push('/projects');
       }
     } catch (err: any) {
-      toast.error(err.message || 'Signup failed');
+      toast.error(err.message || t('auth.signupFailed'));
     } finally {
       setLoading(false);
     }
@@ -62,6 +64,7 @@ function SignupForm() {
   return (
     <div className="min-h-screen bg-[#F8F8F8] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+        <div className="mb-3 flex justify-end"><LanguageSwitch /></div>
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-4">
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center">
@@ -70,50 +73,50 @@ function SignupForm() {
             <span className="font-black text-xl">Akili</span>
           </Link>
           <h1 className="text-2xl font-black">
-            {comingFromPastQ ? 'Create account to import' : 'Start studying smarter'}
+            {comingFromPastQ ? t('auth.createToImport') : t('auth.startSmarter')}
           </h1>
           <p className="text-gray-500 text-sm mt-1">
-            Already have an account?{' '}
-            <Link href="/auth/login" className="text-indigo-600 font-semibold">Sign in</Link>
+            {t('auth.haveAccount')}{' '}
+            <Link href="/auth/login" className="text-indigo-600 font-semibold">{t('common.signIn')}</Link>
           </p>
         </div>
 
         {comingFromPastQ && (
           <div className="bg-green-50 border border-green-200 rounded-2xl p-3 mb-4 text-sm text-green-700 text-center">
-            🎉 Create an account to import your PastQ question bank
+            {t('auth.importBanner')}
           </div>
         )}
 
         <div className="bg-white rounded-3xl p-8 shadow-sm border border-black/5">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-sm font-semibold block mb-1">Full Name</label>
+              <label className="text-sm font-semibold block mb-1">{t('auth.fullName')}</label>
               <input value={form.full_name} onChange={set('full_name')} required
-                placeholder="Your full name"
+                placeholder={t('auth.fullNamePlaceholder')}
                 className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:border-indigo-500 text-sm" />
             </div>
             <div>
-              <label className="text-sm font-semibold block mb-1">Email</label>
+              <label className="text-sm font-semibold block mb-1">{t('auth.email')}</label>
               <input type="email" value={form.email} onChange={set('email')} required
                 placeholder="you@gmail.com"
                 className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:border-indigo-500 text-sm" />
             </div>
             <div>
-              <label className="text-sm font-semibold block mb-1">Your Country</label>
+              <label className="text-sm font-semibold block mb-1">{t('auth.country')}</label>
               <select value={form.region} onChange={set('region')}
                 className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:border-indigo-500 text-sm">
                 {REGIONS.map(r => <option key={r} value={r}>{r}</option>)}
               </select>
               <p className="text-[10px] text-gray-400 mt-1">
-                AI can adapt examples to your region and the familiar things you choose 🌍
+                {t('auth.regionHint')}
               </p>
             </div>
             <div>
-              <label className="text-sm font-semibold block mb-1">Password</label>
+              <label className="text-sm font-semibold block mb-1">{t('auth.password')}</label>
               <div className="relative">
                 <input type={showPw ? 'text' : 'password'} value={form.password}
                   onChange={set('password')} required minLength={8}
-                  placeholder="Min. 8 characters"
+                  placeholder={t('auth.minChars')}
                   className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:border-indigo-500 text-sm pr-12" />
                 <button type="button" onClick={() => setShowPw(!showPw)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400">
@@ -123,11 +126,11 @@ function SignupForm() {
             </div>
             <button type="submit" disabled={loading}
               className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2">
-              {loading ? <><Loader2 size={16} className="animate-spin" /> Creating account...</> : 'Create Account'}
+              {loading ? <><Loader2 size={16} className="animate-spin" /> {t('auth.creating')}</> : t('auth.createAccount')}
             </button>
           </form>
           <p className="text-center text-xs text-gray-400 mt-4">
-            By signing up you agree to our Terms of Service
+            {t('auth.terms')}
           </p>
         </div>
       </div>

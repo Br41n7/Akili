@@ -28,3 +28,13 @@ export function LanguagePicker() {
     </div>
   );
 }
+
+/** A small language chooser for pages without Settings (sign in, sign up). */
+export function LanguageSwitch() {
+  const { lang, setLang } = useT();
+  return (
+    <select aria-label="Language" value={lang} onChange={e => setLang(e.target.value as LangCode)} className="h-9 rounded-lg border border-black/10 bg-white px-2 text-xs">
+      {LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+    </select>
+  );
+}

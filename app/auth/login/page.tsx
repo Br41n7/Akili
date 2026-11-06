@@ -6,8 +6,10 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import { GraduationCap, Eye, EyeOff, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useT, LanguageSwitch } from '@/components/I18n';
 
 function LoginForm() {
+  const { t } = useT();
   const router = useRouter();
   const searchParams = useSearchParams();
   const [email, setEmail] = useState('');
@@ -23,7 +25,7 @@ function LoginForm() {
       if (error) throw error;
       router.push(safeRedirect(searchParams.get('redirect')));
     } catch (err: any) {
-      toast.error(err.message || 'Login failed');
+      toast.error(err.message || t('auth.loginFailed'));
     } finally {
       setLoading(false);
     }
@@ -32,6 +34,7 @@ function LoginForm() {
   return (
     <div className="min-h-screen bg-[#F8F8F8] flex items-center justify-center p-4">
       <div className="w-full max-w-md">
+        <div className="mb-3 flex justify-end"><LanguageSwitch /></div>
         <div className="text-center mb-8">
           <Link href="/" className="inline-flex items-center gap-2 mb-4">
             <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center">
@@ -39,23 +42,23 @@ function LoginForm() {
             </div>
             <span className="font-black text-xl">Akili</span>
           </Link>
-          <h1 className="text-2xl font-black">Welcome back</h1>
+          <h1 className="text-2xl font-black">{t('auth.welcomeBack')}</h1>
           <p className="text-gray-500 text-sm mt-1">
-            Don&apos;t have an account?{' '}
-            <Link href="/auth/signup" className="text-indigo-600 font-semibold">Sign up free</Link>
+            {t('auth.noAccount')}{' '}
+            <Link href="/auth/signup" className="text-indigo-600 font-semibold">{t('auth.signUpFree')}</Link>
           </p>
         </div>
 
         <div className="bg-white rounded-3xl p-8 shadow-sm border border-black/5">
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="text-sm font-semibold block mb-1">Email</label>
+              <label className="text-sm font-semibold block mb-1">{t('auth.email')}</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)} required
                 placeholder="you@gmail.com"
                 className="w-full px-4 py-3 rounded-2xl border border-gray-200 focus:outline-none focus:border-indigo-500 text-sm" />
             </div>
             <div>
-              <label className="text-sm font-semibold block mb-1">Password</label>
+              <label className="text-sm font-semibold block mb-1">{t('auth.password')}</label>
               <div className="relative">
                 <input type={showPw ? 'text' : 'password'} value={password}
                   onChange={e => setPassword(e.target.value)} required
@@ -68,19 +71,19 @@ function LoginForm() {
             </div>
             <button type="submit" disabled={loading}
               className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-2xl font-bold text-sm flex items-center justify-center gap-2">
-              {loading ? <><Loader2 size={16} className="animate-spin" /> Signing in...</> : 'Sign In'}
+              {loading ? <><Loader2 size={16} className="animate-spin" /> {t('auth.signingIn')}</> : t('auth.signInBtn')}
             </button>
           </form>
           <div className="text-center mt-4 space-y-2">
             <Link href="/auth/reset" className="text-xs text-gray-400 hover:text-gray-600 block">
-              Forgot password?
+              {t('auth.forgot')}
             </Link>
             <p className="text-xs text-gray-400">
-              Study with past questions?{' '}
+              {t('auth.pastqPrompt')}{' '}
               <a href={process.env.NEXT_PUBLIC_PASTQ_URL || 'https://pastq.co'}
                 target="_blank" rel="noopener noreferrer"
                 className="text-green-600 font-semibold">
-                Visit PastQ →
+                {t('auth.visitPastq')}
               </a>
             </p>
           </div>

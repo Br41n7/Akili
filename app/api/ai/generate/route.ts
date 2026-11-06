@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { languageInstruction } from '@/lib/i18n/server';
+import { detectLanguage, materialLanguageInstruction } from '@/lib/i18n/detect';
 import { z } from 'zod';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
@@ -114,11 +115,21 @@ export async function POST(req: NextRequest) {
     // A custom style is used only while the learner's plan includes it; the text is read from the database, never from the request.
     const customStyle = wantsCustom && planCapabilities(userPlan.plan).has('custom_tutor_style') ? String((profile as any)?.custom_tutor_style || '').slice(0, 300) : '';
 
+    // Explanations follow the language of the learner's own material. The interface language is used only when the project has none.
+    let languageBlock = languageInstruction(languageInput);
+    if (projectId) {
+      try { // a failure here must never stop the learner's request: fall back to the interface language
+        const { data: docs } = await supabaseAdmin.from('documents').select('content').eq('project_id', projectId).eq('user_id', user.id).order('created_at', { ascending: false }).limit(3);
+        const sample = (docs || []).map((d: any) => String(d.content || '').slice(0, 2500)).join('\n').trim();
+        if (sample) languageBlock = materialLanguageInstruction(detectLanguage(sample), true);
+      } catch { /* keep the interface-language line */ }
+    }
+
     const system = [
       customStyle ? customStyleInstruction(customStyle) : (PERSONAS[persona] || persona),
       projectBlock,
       buildCulturalBlock(region, (profile as any)?.region_context || {}),
-      languageInstruction(languageInput),
+      languageBlock,
       systemInstruction,
     ].filter(Boolean).join('\n\n');
 

@@ -17,7 +17,16 @@
 - The wording was written by an AI and is NOT reviewed by native speakers. Have each checked before launch.
 - Picker is in Settings. The choice is stored in the browser (localStorage), first visit follows the browser language. It does not
   follow the learner across devices (that needs a profile column and a migration; not done).
-- Translated now: project tabs, settings, project list header and buttons, landing "Sign in", course navigation buttons.
-  Everything else (quiz, exam, ask, plans, errors, auth pages, landing text) is still English.
-- AI replies: `callAI` sends the language, the server validates it against the supported list and adds one line to the system prompt.
-  JSON keys stay English. Models are weaker in some languages; this was not tested with a real model.
+- Translated now: project tabs, settings, project list header and buttons, landing "Sign in", course navigation buttons, sign in and
+  sign up pages (with a small language switch), the Materials screen.
+  Still English: quiz, exam, Ask AI, flashcards, plan, study tools, new-project sheet, forgot/reset password pages, plans, most error
+  messages, landing text.
+## Language of explanations (follows the learner's materials, not the interface)
+- With a project, the server samples the newest three documents (first 2,500 characters each), guesses their language
+  (`lib/i18n/detect.ts`: English, French, Spanish, Portuguese, German, Italian, Swahili, Hausa, Yoruba, Arabic, Russian, Chinese,
+  Japanese, Korean, Hindi) and tells the model to write in it. French notes with an English interface give French explanations.
+- If the material's language is unclear (short or mixed), the model is told to match the material's language without naming one.
+- With no project or no material, the interface language is used. JSON keys, code and maths stay as the format requires.
+- Detection is a word-list guess, not a trained model: unreliable on very short text, and Yoruba/Hausa/Swahili lists are small.
+  It never blocks a request: any failure falls back to the interface language.
+- Not tested with a real model; models write some languages worse than English.
