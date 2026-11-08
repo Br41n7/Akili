@@ -15,18 +15,22 @@ import { recordVisualAnswer } from '@/lib/visual/adaptive';
 import type { VisualSpec } from '@/lib/visual/schema';
 import { ArrowRight, Brain, Check, ImagePlus, RotateCcw, Sparkles, X } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useT } from '@/components/I18n';
+import AfterActivity from '@/components/AfterActivity';
+
 import {
   Button, ChoiceChips, Chip, ErrorState, Field, GeneratingPanel, OptionRow, ProgressBar, Surface, TextArea, TextInput, splitOption, type OptionState,
 } from '@/components/ui';
 
-interface Props { projectId: string; userId: string; region: string; persona: string; onGoToMaterials?: () => void }
+interface Props { projectId: string; userId: string; region: string; persona: string; onGoToMaterials?: () => void; onGoTo?: (tab: string) => void }
 
 type Phase = 'setup' | 'generating' | 'quiz' | 'results' | 'visual';
 type Difficulty = 'easy' | 'medium' | 'hard';
 
 const STEPS = ['Reading your materials', 'Checking what you already know', 'Writing questions', 'Checking the answers'];
 
-export default function QuizMode({ projectId, userId, region, persona }: Props) {
+export default function QuizMode({ projectId, userId, region, persona, onGoTo }: Props) {
+  const { t } = useT();
   const [phase, setPhase] = useState<Phase>('setup');
   const [topic, setTopic] = useState('');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
@@ -186,31 +190,31 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
 
   // ── Setup ─────────────────────────────────────────────────────────────────
 
-  if (phase === 'generating') return <div className="p-4"><GeneratingPanel title="Building your quiz" steps={STEPS} /></div>;
+  if (phase === 'generating') return <div className="p-4"><GeneratingPanel title={t('quiz.building')} steps={STEPS} /></div>;
 
   if (phase === 'setup') {
     return (
       <div className="space-y-4 p-4">
         <div>
-          <h2 className="text-2xl font-extrabold tracking-tight">Practice quiz</h2>
-          <p className="mt-1 flex items-center gap-1.5 text-sm text-muted"><Brain size={15} /> Leave the topic blank and Akili picks your weak areas.</p>
+          <h2 className="text-2xl font-extrabold tracking-tight">{t('quiz.title')}</h2>
+          <p className="mt-1 flex items-center gap-1.5 text-sm text-muted"><Brain size={15} /> {t('quiz.hint')}</p>
         </div>
 
         {error && <ErrorState message={error} onRetry={() => start()} />}
 
         <Surface className="space-y-5 p-4">
-          <Field label="Topic" htmlFor="qz-topic" optional>
-            <TextInput id="qz-topic" value={topic} onChange={e => setTopic(e.target.value)} placeholder="e.g. Photosynthesis" maxLength={120} />
+          <Field label={t('quiz.topic')} htmlFor="qz-topic" optional>
+            <TextInput id="qz-topic" value={topic} onChange={e => setTopic(e.target.value)} placeholder={t('quiz.topicPh')} maxLength={120} />
           </Field>
           <div className="space-y-1.5">
-            <p className="text-sm font-semibold">Difficulty</p>
-            <ChoiceChips<Difficulty> label="Difficulty" value={difficulty} onChange={setDifficulty}
+            <p className="text-sm font-semibold">{t('quiz.difficulty')}</p>
+            <ChoiceChips<Difficulty> label={t('quiz.difficulty')} value={difficulty} onChange={setDifficulty}
               options={[{ value: 'easy', label: 'Easy' }, { value: 'medium', label: 'Medium' }, { value: 'hard', label: 'Hard' }]} />
           </div>
 
           <details className="group rounded-xl border border-rule">
             <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 text-sm font-semibold">
-              More options
+              {t('quiz.moreOptions')}
               <span className="truncate text-xs font-normal text-muted group-open:hidden">
                 {clampCount(count)} question{clampCount(count) === 1 ? '' : 's'} · {types.map(t => QUESTION_TYPES.find(x => x.value === t)!.label.replace(/ \(.*\)/, '')).join(', ')}
               </span>
@@ -234,8 +238,8 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
           </details>
         </Surface>
 
-        <Button block onClick={() => start()}><Sparkles size={17} /> Start quiz</Button>
-        <Button block variant="quiet" onClick={startVisual}><ImagePlus size={17} /> Quiz me with a diagram</Button>
+        <Button block onClick={() => start()}><Sparkles size={17} /> {t('quiz.start')}</Button>
+        <Button block variant="quiet" onClick={startVisual}><ImagePlus size={17} /> {t('quiz.withDiagram')}</Button>
       </div>
     );
   }
@@ -273,7 +277,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
         <div>
           <div className="mb-1.5 flex items-center justify-between text-xs font-semibold text-muted">
             <span>Question {index + 1} of {questions.length}</span>
-            <button onClick={reset} className="min-h-8 px-1 text-muted underline underline-offset-2">Quit</button>
+            <button onClick={reset} className="min-h-8 px-1 text-muted underline underline-offset-2">{t('quiz.quit')}</button>
           </div>
           <ProgressBar value={((index + (revealed ? 1 : 0)) / questions.length) * 100} label="Quiz progress" />
         </div>
@@ -299,18 +303,18 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
                 value={answer || ''}
                 disabled={revealed}
                 onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
-                placeholder="Write your answer in a few sentences"
+                placeholder={t('quiz.writeAnswer')}
                 rows={6}
                 aria-label="Your answer"
               />
               {revealed && (
                 <div className="space-y-3 rounded-xl border border-rule bg-paper p-3.5">
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-muted">Model answer</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-muted">{t('quiz.modelAnswer')}</p>
                     <p className="mt-1 font-read text-base leading-relaxed">{q.model_answer}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-bold uppercase tracking-wide text-muted">Tick the points your answer covered</p>
+                    <p className="text-xs font-bold uppercase tracking-wide text-muted">{t('quiz.tickPoints')}</p>
                     <ul className="mt-1.5 space-y-1.5">
                       {q.marking_points.map((pt: string, i: number) => {
                         const on = !!theoryMarks[q.id]?.covered.includes(i);
@@ -340,7 +344,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
                 value={answer || ''}
                 disabled={revealed}
                 onChange={e => setAnswers(a => ({ ...a, [q.id]: e.target.value }))}
-                placeholder="Type your answer"
+                placeholder={t('quiz.typeAnswer')}
                 autoCapitalize="none"
                 autoComplete="off"
                 aria-label="Your answer"
@@ -369,11 +373,11 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
 
         <div className="pb-safe sticky bottom-[64px] -mx-4 border-t border-rule bg-chalk/95 p-3 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0">
           {!revealed ? (
-            <Button block disabled={!canCheck} onClick={() => setRevealed(true)}>Check answer</Button>
+            <Button block disabled={!canCheck} onClick={() => setRevealed(true)}>{t('quiz.check')}</Button>
           ) : last ? (
-            <Button block onClick={finish}>See results <ArrowRight size={17} /></Button>
+            <Button block onClick={finish}>{t('quiz.seeResults')} <ArrowRight size={17} /></Button>
           ) : (
-            <Button block onClick={() => { setIndex(i => i + 1); setRevealed(false); }}>Next question <ArrowRight size={17} /></Button>
+            <Button block onClick={() => { setIndex(i => i + 1); setRevealed(false); }}>{t('quiz.nextQ')} <ArrowRight size={17} /></Button>
           )}
         </div>
       </div>
@@ -389,7 +393,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
   return (
     <div className="space-y-4 p-4">
       <Surface className="p-6 text-center">
-        <p className="text-sm font-semibold text-muted">Your score</p>
+        <p className="text-sm font-semibold text-muted">{t('quiz.score')}</p>
         <p className="mt-1 text-6xl font-extrabold tracking-tight">{score}<span className="text-3xl text-muted">/{questions.length}</span></p>
         <p className="mt-2 text-sm text-muted">
           {ratio === 1 ? 'A perfect round.' : ratio >= 0.7 ? 'Good work. A little more on the ones you missed.' : 'Worth another look at the topics below.'}
@@ -397,10 +401,10 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
       </Surface>
 
       {analyzing ? (
-        <GeneratingPanel title="Updating your learning profile" steps={['Saving your answers']} />
+        <GeneratingPanel title={t('quiz.updating')} steps={['Saving your answers']} />
       ) : summary?.next_focus?.length > 0 && (
         <Surface className="border-marker bg-marker-wash p-4">
-          <p className="text-sm font-bold">Focus on next</p>
+          <p className="text-sm font-bold">{t('quiz.focusNext')}</p>
           <ul className="mt-1.5 space-y-1">
             {summary.next_focus.slice(0, 3).map((x: string, i: number) => <li key={i} className="text-sm">{x}</li>)}
           </ul>
@@ -409,14 +413,14 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
 
       {missed.length > 0 && (
         <section aria-label="Questions to review" className="space-y-3">
-          <h3 className="text-lg font-bold">Review what you missed</h3>
+          <h3 className="text-lg font-bold">{t('quiz.review')}</h3>
           {missed.map(q => (
             <Surface key={q.id} className="space-y-2 p-4">
               <p className="font-read text-base font-semibold leading-snug">{q.question}</p>
               {q.type === 'statements' && Array.isArray(q.statements) && (
                 <ol className="space-y-1 text-sm">{q.statements.map((st: string, i: number) => <li key={i}>{st}</li>)}</ol>
               )}
-              <p className="text-sm"><span className="font-semibold text-tick">Answer: </span>{q.type === 'fill_gap' ? String(q.correct_answer).split(/\s*\|\s*/)[0] : q.type === 'theory' ? q.model_answer : (q.options?.find((o: string) => o.startsWith(`${q.correct_answer})`)) || q.correct_answer)}</p>
+              <p className="text-sm"><span className="font-semibold text-tick">{t('quiz.answer')}</span>{q.type === 'fill_gap' ? String(q.correct_answer).split(/\s*\|\s*/)[0] : q.type === 'theory' ? q.model_answer : (q.options?.find((o: string) => o.startsWith(`${q.correct_answer})`)) || q.correct_answer)}</p>
               {q.explanation && <p className="text-sm leading-relaxed text-muted">{q.explanation}</p>}
               <ConceptVisual concept={q.concept || topic || 'this question'} text={`${q.question}\n${q.explanation || ''}`} projectId={projectId} userId={userId} region={region} persona={persona} />
             </Surface>
@@ -424,7 +428,8 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
         </section>
       )}
 
-      <Button block onClick={reset}><RotateCcw size={16} /> New quiz</Button>
+      <AfterActivity onGoTo={onGoTo} message={t('guide.afterQuiz')} actions={[{ label: t('guide.askExplain'), tab: 'ask' }, { label: t('guide.makeCards'), tab: 'flashcards' }]} />
+      <Button block onClick={reset}><RotateCcw size={16} /> {t('quiz.newQuiz')}</Button>
     </div>
   );
 }

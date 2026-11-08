@@ -1,7 +1,7 @@
 import { CATALOGS, en, type MessageKey } from './messages';
 
 export const LANGUAGES = [
-  { code: 'en', name: 'English' }, { code: 'fr', name: 'Français' }, { code: 'es', name: 'Español' }, { code: 'pt', name: 'Português' },
+  { code: 'en', name: 'English' }, { code: 'fr', name: 'Français' }, { code: 'es', name: 'Español' }, { code: 'pt', name: 'Português' }, { code: 'vi', name: 'Tiếng Việt' },
 ] as const;
 export type LangCode = (typeof LANGUAGES)[number]['code'];
 export const STORAGE_KEY = 'akili_lang';

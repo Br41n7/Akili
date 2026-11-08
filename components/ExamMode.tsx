@@ -1,4 +1,7 @@
 'use client';
+import { useT } from '@/components/I18n';
+import AfterActivity from '@/components/AfterActivity';
+
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { callAIJSON, cn, errorMessage } from '@/lib/utils';
@@ -10,14 +13,15 @@ import {
   Button, ConfirmDialog, EmptyState, ErrorState, GeneratingPanel, OptionRow, Surface, splitOption, type OptionState,
 } from '@/components/ui';
 
-interface Props { projectId: string; userId: string; region: string; persona: string; onGoToMaterials?: () => void }
+interface Props { projectId: string; userId: string; region: string; persona: string; onGoToMaterials?: () => void; onGoTo?: (tab: string) => void }
 
 const DURATION = 45 * 60;
 const STEPS = ['Reading your materials', 'Choosing questions to test what you know', 'Writing the exam', 'Finalizing'];
 
 const fmt = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
-export default function ExamMode({ projectId, userId, region, persona, onGoToMaterials }: Props) {
+export default function ExamMode({ projectId, userId, region, persona, onGoToMaterials, onGoTo }: Props) {
+  const { t } = useT();
   const [phase, setPhase] = useState<'intro' | 'generating' | 'exam' | 'submitting' | 'results'>('intro');
   const [exam, setExam] = useState<any>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -120,19 +124,19 @@ Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_conc
       <div className="p-4">
         {error === 'MATERIALS' ? (
           <>
-            <EmptyState icon={<ShieldAlert size={22} />} title="Add materials first">
-              Exam mode builds questions from your notes and documents. Add some in the Materials tab, then come back.
+            <EmptyState icon={<ShieldAlert size={22} />} title={t('exam.addFirst')}>
+              {t('exam.addFirstBody')}
             </EmptyState>
-            {onGoToMaterials && <Button block className="mt-4" variant="quiet" onClick={onGoToMaterials}>Go to Materials</Button>}
+            {onGoToMaterials && <Button block className="mt-4" variant="quiet" onClick={onGoToMaterials}>{t('exam.goMaterials')}</Button>}
           </>
         ) : (
           <>
             <EmptyState
               icon={<ShieldAlert size={22} />}
-              title="Exam Mode"
-              action={<Button onClick={generate}>Start exam</Button>}
+              title={t('exam.title')}
+              action={<Button onClick={generate}>{t('exam.start')}</Button>}
             >
-              A timed, 10-question mock exam with mixed question types, including a few tricky ones that catch surface-level memorizing.
+              {t('exam.desc')}
             </EmptyState>
             {error && <div className="mt-4"><ErrorState message={error} onRetry={generate} /></div>}
           </>
@@ -141,8 +145,8 @@ Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_conc
     );
   }
 
-  if (phase === 'generating') return <div className="p-4"><GeneratingPanel title="Building your exam" steps={STEPS} /></div>;
-  if (phase === 'submitting') return <div className="p-4"><GeneratingPanel title="Marking your exam" steps={['Checking your answers', 'Finding weak and strong areas', 'Saving your result']} /></div>;
+  if (phase === 'generating') return <div className="p-4"><GeneratingPanel title={t('exam.building')} steps={STEPS} /></div>;
+  if (phase === 'submitting') return <div className="p-4"><GeneratingPanel title={t('exam.marking')} steps={['Checking your answers', 'Finding weak and strong areas', 'Saving your result']} /></div>;
 
   // ── Results ───────────────────────────────────────────────────────────────
 
@@ -159,19 +163,19 @@ Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_conc
 
         {analysis.weak_concepts?.length > 0 && (
           <Surface className="border-redpen/30 p-4">
-            <p className="mb-1.5 text-sm font-bold text-redpen">Study these next</p>
+            <p className="mb-1.5 text-sm font-bold text-redpen">{t('exam.studyNext')}</p>
             {analysis.weak_concepts.map((c: string, i: number) => <p key={i} className="text-sm leading-relaxed">{c}</p>)}
           </Surface>
         )}
         {analysis.strong_concepts?.length > 0 && (
           <Surface className="border-tick/30 p-4">
-            <p className="mb-1.5 text-sm font-bold text-tick">You have these down</p>
+            <p className="mb-1.5 text-sm font-bold text-tick">{t('exam.haveDown')}</p>
             {analysis.strong_concepts.map((c: string, i: number) => <p key={i} className="text-sm leading-relaxed">{c}</p>)}
           </Surface>
         )}
         {analysis.recommendations?.length > 0 && (
           <Surface className="p-4">
-            <p className="mb-1.5 text-sm font-bold">Recommendations</p>
+            <p className="mb-1.5 text-sm font-bold">{t('exam.recs')}</p>
             {analysis.recommendations.map((r: string, i: number) => <p key={i} className="text-sm leading-relaxed text-muted">{r}</p>)}
           </Surface>
         )}
@@ -182,11 +186,11 @@ Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_conc
           const optionsOf = (eq: any) => (eq.type === 'true_false' ? ['A) True', 'B) False'] : eq.options || []);
           return (
             <section aria-label="Questions to review" className="space-y-3">
-              <h3 className="text-lg font-bold">Review what you missed</h3>
+              <h3 className="text-lg font-bold">{t('quiz.review')}</h3>
               {missed.slice(0, 6).map((eq: any) => (
                 <Surface key={eq.id} className="space-y-2 p-4">
                   <p className="font-read text-base font-semibold leading-snug">{eq.question}</p>
-                  <p className="text-sm"><span className="font-semibold text-tick">Answer: </span>{optionsOf(eq).find((o: string) => o.startsWith(`${eq.correct_answer})`)) || eq.correct_answer}</p>
+                  <p className="text-sm"><span className="font-semibold text-tick">{t('quiz.answer')}</span>{optionsOf(eq).find((o: string) => o.startsWith(`${eq.correct_answer})`)) || eq.correct_answer}</p>
                   {eq.explanation && <p className="text-sm leading-relaxed text-muted">{eq.explanation}</p>}
                   <ConceptVisual concept={eq.concept || 'this question'} text={`${eq.question}\n${eq.explanation || ''}`} projectId={projectId} userId={userId} region={region} persona={persona} />
                 </Surface>
@@ -195,7 +199,8 @@ Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_conc
           );
         })()}
 
-        <Button block onClick={retake}><RotateCcw size={16} /> Retake exam</Button>
+        <AfterActivity onGoTo={onGoTo} message={t('guide.afterQuiz')} actions={[{ label: t('guide.askExplain'), tab: 'ask' }, { label: t('guide.makeCards'), tab: 'flashcards' }]} />
+        <Button block onClick={retake}><RotateCcw size={16} /> {t('exam.retake')}</Button>
       </div>
     );
   }
@@ -215,7 +220,7 @@ Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_conc
         <button onClick={() => setShowNav(true)} className="flex-1 text-center text-sm font-semibold text-muted underline-offset-2 hover:underline">
           {answeredCount}/{exam.questions.length} answered
         </button>
-        <Button size="sm" variant="dark" onClick={() => setConfirmSubmit(true)}>Submit</Button>
+        <Button size="sm" variant="dark" onClick={() => setConfirmSubmit(true)}>{t('exam.submit')}</Button>
       </div>
 
       <div className="flex items-center justify-between">
@@ -237,11 +242,11 @@ Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_conc
       </div>
 
       <div className="grid grid-cols-2 gap-2 pt-2">
-        <Button variant="quiet" disabled={index === 0} onClick={() => setIndex(i => i - 1)}>Previous</Button>
+        <Button variant="quiet" disabled={index === 0} onClick={() => setIndex(i => i - 1)}>{t('course.previous')}</Button>
         {index === exam.questions.length - 1 ? (
-          <Button variant="dark" onClick={() => setConfirmSubmit(true)}>Review & submit</Button>
+          <Button variant="dark" onClick={() => setConfirmSubmit(true)}>{t('exam.reviewSubmit')}</Button>
         ) : (
-          <Button variant="dark" onClick={() => setIndex(i => i + 1)}>Next</Button>
+          <Button variant="dark" onClick={() => setIndex(i => i + 1)}>{t('course.next')}</Button>
         )}
       </div>
 
@@ -249,7 +254,7 @@ Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_conc
         <div className="fixed inset-0 z-[70] flex items-end bg-ink/50 animate-fade" onClick={() => setShowNav(false)}>
           <div role="dialog" aria-modal="true" aria-label="Jump to question" onClick={e => e.stopPropagation()} className="pb-safe w-full animate-sheet rounded-t-3xl bg-paper p-4">
             <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-bold">Questions</h2>
+              <h2 className="text-base font-bold">{t('exam.questions')}</h2>
               <button onClick={() => setShowNav(false)} aria-label="Close" className="flex h-10 w-10 items-center justify-center rounded-lg active:bg-chalk"><X size={20} /></button>
             </div>
             <div className="grid grid-cols-5 gap-2 xs:grid-cols-6">
@@ -276,11 +281,11 @@ Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_conc
 
       <ConfirmDialog
         open={confirmSubmit}
-        title="Submit your exam?"
+        title={t('exam.submitQ')}
         body={answeredCount < exam.questions.length
           ? `You have answered ${answeredCount} of ${exam.questions.length} questions. Unanswered questions will be marked wrong.`
           : 'You will see your score and a breakdown of strong and weak areas.'}
-        confirmLabel="Submit exam"
+        confirmLabel={t('exam.submitConfirm')}
         onConfirm={submit}
         onCancel={() => setConfirmSubmit(false)}
       />

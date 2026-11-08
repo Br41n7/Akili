@@ -1,4 +1,5 @@
 'use client';
+import { useT } from '@/components/I18n';
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { callAI, callAIJSON, cn, errorMessage } from '@/lib/utils';
@@ -13,6 +14,7 @@ interface Message { role: 'user' | 'ai'; text: string; failed?: boolean }
 interface QuickQuestion { id: string; question: string; options: string[]; correct_answer: string; explanation: string; concept: string; cognitive_level: string }
 
 export default function AskAI({ projectId, userId, region, persona, onGoToMaterials }: Props) {
+  const { t } = useT();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -78,7 +80,7 @@ STRICT SCOPE AND LEVEL RULES:
       const result = await callAI({ task: 'adaptive_tutor', prompt, region, persona, projectId });
       setMessages(p => [...p, { role: 'ai', text: result }]);
     } catch (err) {
-      setMessages(p => [...p, { role: 'ai', text: errorMessage(err, 'Something went wrong. Please try asking again.'), failed: true }]);
+      setMessages(p => [...p, { role: 'ai', text: errorMessage(err, t('ask.error')), failed: true }]);
     } finally {
       setLoading(false);
     }
@@ -161,10 +163,10 @@ Return JSON: { "questions": [{ "id": string, "question": string, "options": ["A)
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 py-14 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-biro-wash text-biro-dark"><MessageSquare size={22} /></span>
-            <p className="font-bold text-ink">Ask about your materials</p>
-            <p className="max-w-xs text-sm text-muted">Akili answers using what you have uploaded and adapts to what you already understand.</p>
+            <p className="font-bold text-ink">{t('ask.title')}</p>
+            <p className="max-w-xs text-sm text-muted">{t('ask.desc')}</p>
             {noMaterials && onGoToMaterials && (
-              <Button variant="quiet" size="sm" className="mt-2" onClick={onGoToMaterials}>Add materials first</Button>
+              <Button variant="quiet" size="sm" className="mt-2" onClick={onGoToMaterials}>{t('exam.addFirst')}</Button>
             )}
           </div>
         )}
@@ -191,7 +193,7 @@ Return JSON: { "questions": [{ "id": string, "question": string, "options": ["A)
 
               {practiceFor === i && (
                 <div className="space-y-2.5 pt-1">
-                  {practiceLoading && <Surface className="p-3 text-sm text-muted">Building a quick check…</Surface>}
+                  {practiceLoading && <Surface className="p-3 text-sm text-muted">{t('ask.quickBuilding')}</Surface>}
                   {practiceError && <Surface className="border-redpen/30 p-3 text-sm text-redpen">{practiceError}</Surface>}
                   {practice.map((q, qi) => (
                     <Surface key={q.id} className="space-y-2 p-3.5">
@@ -240,11 +242,11 @@ Return JSON: { "questions": [{ "id": string, "question": string, "options": ["A)
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } }}
-          placeholder="Ask about your materials"
+          placeholder={t('ask.title')}
           rows={1}
           className="max-h-28 resize-none py-2.5"
         />
-        <IconButton label="Send" onClick={send} disabled={!input.trim() || loading} className="bg-biro text-white hover:bg-biro-dark disabled:opacity-40"><Send size={18} /></IconButton>
+        <IconButton label={t('ask.send')} onClick={send} disabled={!input.trim() || loading} className="bg-biro text-white hover:bg-biro-dark disabled:opacity-40"><Send size={18} /></IconButton>
       </div>
     </div>
   );

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 import {
   ArrowLeft, BarChart3, BookOpen, Brain, CalendarDays, Camera, Lightbulb, FileText, GraduationCap, HelpCircle, MessageSquare,
-  MoreHorizontal, ShieldAlert, Sparkles, X, Zap, Image as ImageIcon,
+  MoreHorizontal, Compass, ShieldAlert, Sparkles, X, Zap, Image as ImageIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button, Chip, ErrorState, IconButton, Skeleton } from '@/components/ui';
@@ -27,13 +27,15 @@ import ResearchLab from '@/components/ResearchLab';
 import QuickNoteModal from '@/components/QuickNoteModal';
 import ProjectSidebar from '@/components/ProjectSidebar';
 import { useT } from '@/components/I18n';
+import ProjectGuide, { NextStepCard } from '@/components/ProjectGuide';
 import type { MessageKey } from '@/lib/i18n/messages';
 
-type Tab = 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'study' | 'help' | 'snap' | 'ask' | 'analysis' | 'progress' | 'research' | 'plan' | 'figures';
+type Tab = 'guide' | 'materials' | 'course' | 'quiz' | 'exam' | 'flashcards' | 'study' | 'help' | 'snap' | 'ask' | 'analysis' | 'progress' | 'research' | 'plan' | 'figures';
 
 interface TabDef { id: Tab; label: string; icon: React.ComponentType<{ size?: number; strokeWidth?: number }>; desc: string }
 
 const TABS: TabDef[] = [
+  { id: 'guide', label: 'Start here', icon: Compass, desc: 'A quick tour of what Akili can do' },
   { id: 'materials', label: 'Materials', icon: FileText, desc: 'Notes and documents' },
   ...(process.env.NEXT_PUBLIC_AKILI_FIGURES === 'true' ? [{ id: 'figures' as const, label: 'Figures', icon: ImageIcon, desc: 'Diagrams from your own materials' }] : []),
   { id: 'course', label: 'Course', icon: GraduationCap, desc: 'Lessons built from your materials' },
@@ -172,14 +174,15 @@ export default function ProjectPage() {
       </header>
 
       <main className="mx-auto w-full max-w-3xl flex-1 pb-28 md:pb-10">
-        {tab === 'materials' && <Materials projectId={projectId} userId={user.id} />}
+        {tab === 'guide' && <ProjectGuide projectId={projectId} userId={user.id} onGoTo={t => setTab(t as Tab)} tools={Object.fromEntries(L.map(x => [x.id, { label: x.label, icon: x.icon }]))} />}
+        {tab === 'materials' && <><NextStepCard projectId={projectId} userId={user.id} onGoTo={t => setTab(t as Tab)} /><Materials projectId={projectId} userId={user.id} /></>}
         {tab === 'figures' && <FiguresView projectId={projectId} />}
-        {tab === 'course' && <CourseView projectId={projectId} userId={user.id} region={region} persona={persona} userGroqKey={userGroqKey} onGoToMaterials={() => setTab('materials')} />}
+        {tab === 'course' && <CourseView projectId={projectId} userId={user.id} region={region} persona={persona} userGroqKey={userGroqKey} onGoToMaterials={() => setTab('materials')} onGoTo={t => setTab(t as Tab)} />}
         {tab === 'analysis' && <TopicAnalysis projectId={projectId} examType={project.exam_board || project.exam_type || undefined} isSecondary={levelOf(project) === 'secondary'} />}
         {tab === 'plan' && <PlanView projectId={projectId} userId={user.id} onGoTo={t => setTab(t as Tab)} />}
         {tab === 'progress' && <LearningProgress projectId={projectId} userId={user.id} onGoTo={t => setTab(t as Tab)} />}
-        {tab === 'quiz' && <QuizMode projectId={projectId} userId={user.id} region={region} persona={persona} onGoToMaterials={() => setTab('materials')} />}
-        {tab === 'exam' && <ExamMode projectId={projectId} userId={user.id} region={region} persona={persona} onGoToMaterials={() => setTab('materials')} />}
+        {tab === 'quiz' && <QuizMode projectId={projectId} userId={user.id} region={region} persona={persona} onGoToMaterials={() => setTab('materials')} onGoTo={t => setTab(t as Tab)} />}
+        {tab === 'exam' && <ExamMode projectId={projectId} userId={user.id} region={region} persona={persona} onGoToMaterials={() => setTab('materials')} onGoTo={t => setTab(t as Tab)} />}
         {tab === 'snap' && <SnapSolve projectId={projectId} region={region} />}
         {tab === 'help' && <HelpTools projectId={projectId} userId={user.id} region={region} />}
         {tab === 'study' && <StudyTools projectId={projectId} userId={user.id} region={region} onGoToMaterials={() => setTab('materials')} />}

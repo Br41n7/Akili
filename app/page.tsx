@@ -225,6 +225,7 @@ export default function Home() {
       <footer className="bg-paper">
         <div className="pb-safe mx-auto flex max-w-6xl flex-col gap-3 px-4 py-8 text-sm text-muted sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <Wordmark className="text-base" />
+          <Link href="/faq" className="font-semibold text-biro">{t('faq.title')}</Link>
           <p>© {new Date().getFullYear()} Akili. A study copilot for secondary school and university learners.</p>
         </div>
       </footer>

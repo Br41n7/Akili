@@ -1,6 +1,8 @@
 'use client';
 import { continueLabel, endsModule } from '@/lib/course-nav';
 import { useT } from '@/components/I18n';
+import AfterActivity from '@/components/AfterActivity';
+
 import { addLesson, saveCompletedLessons } from '@/lib/course-progress';
 import { usePlan } from '@/lib/use-plan';
 import LessonRating from '@/components/LessonRating';
@@ -30,6 +32,7 @@ interface Props {
   projectId: string; userId: string;
   region: string; persona: string; userGroqKey?: string;
   onGoToMaterials?: () => void;
+  onGoTo?: (tab: string) => void;
 }
 
 const STEPS = [
@@ -38,7 +41,7 @@ const STEPS = [
   'Saving your course outline',
 ];
 
-export default function CourseView({ projectId, userId, region, persona, userGroqKey, onGoToMaterials }: Props) {
+export default function CourseView({ projectId, userId, region, persona, userGroqKey, onGoToMaterials, onGoTo }: Props) {
   const { t: tr } = useT();
   const [course, setCourse] = useState<any>(null);
   const [project, setProject] = useState<ProjectRecord | null>(null);
@@ -428,6 +431,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
             <CheckCircle2 size={18} /> {isDone ? tr('course.completed') : tr('course.markComplete')}
           </Button>
           {isDone && <LessonRating lessonId={active.id} page="/course" />}
+          {isDone && <AfterActivity onGoTo={onGoTo} message={tr('guide.afterLesson')} actions={[{ label: tr('guide.takeQuiz'), tab: 'quiz' }]} />}
           <div className="grid grid-cols-2 gap-2">
             <Button variant="quiet" disabled={!prev} onClick={() => prev && openLesson(prev.id)}><ArrowLeft size={16} /> {tr('course.previous')}</Button>
             <Button variant="dark" disabled={!next} onClick={() => { if (!next) return; if (endsModule(lessons, activeIndex) && next.moduleId) setOpenModule(next.moduleId); openLesson(next.id); }}>{endsModule(lessons, activeIndex) ? tr('course.nextModule') : tr('course.next')} <ArrowRight size={16} /></Button>

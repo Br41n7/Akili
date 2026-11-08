@@ -14,10 +14,11 @@ const WORDS: Record<string, string> = {
   it: 'il lo gli le dei delle un una e è che di in per con non più come ma suo sua sono stato essere hanno anche tra sopra può quando molto senza già ogni dove perché nel nella alla',
   sw: 'na ya wa kwa ni za katika la kuwa cha hii huu hiyo kama au pia sana lakini kutoka yake wake zake vya kila mimi wewe sisi wao hiyo ambayo',
   ha: 'da a na ta ne ce cikin ya su ba wani wata kuma don daga shi ita mai wanda wadda amma kamar sosai ko duk wannan waɗannan',
+  vi: 'và là của có không một những được trong cho này với các đã để khi người cũng như từ tại theo về ra thì cần rất nhiều bởi nên sẽ đó',
   yo: 'ni ti o a ń kan fún sí àti pé tí wọ́n jẹ́ bí ọ̀kan nínú lórí náà yìí wọ̀nyí ṣùgbọ́n gbogbo',
 };
 const NAMES: Record<string, string> = {
-  en: 'English', fr: 'French', es: 'Spanish', pt: 'Portuguese', de: 'German', it: 'Italian', sw: 'Swahili', ha: 'Hausa', yo: 'Yoruba',
+  en: 'English', fr: 'French', es: 'Spanish', pt: 'Portuguese', de: 'German', it: 'Italian', sw: 'Swahili', vi: 'Vietnamese', ha: 'Hausa', yo: 'Yoruba',
   ar: 'Arabic', ru: 'Russian', zh: 'Chinese', ja: 'Japanese', ko: 'Korean', hi: 'Hindi',
 };
 const SETS = Object.fromEntries(Object.entries(WORDS).map(([k, v]) => [k, new Set(v.split(' '))]));
@@ -25,6 +26,7 @@ const SCRIPTS: Array<[string, RegExp]> = [
   ['ar', /[؀-ۿ]/g], ['ru', /[Ѐ-ӿ]/g], ['hi', /[ऀ-ॿ]/g],
   ['ja', /[぀-ヿ]/g], ['ko', /[가-힯]/g], ['zh', /[一-鿿]/g],
 ];
+export const englishName = (code: string) => NAMES[code] || 'English';
 const det = (code: string): Detected => ({ code, name: NAMES[code] });
 
 export function detectLanguage(text: string | null | undefined): Detected | null {
