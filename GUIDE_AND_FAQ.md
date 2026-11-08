@@ -1,11 +1,12 @@
-# Start-here guide and FAQ (phase 4q)
+# Project Home, next steps and FAQ (phase 4r)
 
-- **Start here tab** (`components/ProjectGuide.tsx`): first appears under "More" (phone) and in the side list (desktop). Shows four first
-  steps (add materials, build a course, take a quiz, try a mock exam) ticked from real activity: documents/notes, `courses`,
-  and `exam_attempts` rows with type `quiz` / `exam`. Below it, every other tool in one line, tappable.
-- **Next-step card** at the top of Materials (the default landing tab for a new project): shows the first step not done yet, with a
-  "Hide" link (remembered per project in the browser only).
-- **After-activity prompts** (`components/AfterActivity.tsx`): after a lesson is completed, a quiz, an exam.
-- **FAQ** at `/faq` (public, translated into all five languages), linked from the landing footer and the Start-here tab.
-- Not verified in a real browser. A step counts as done once a row exists; a quiz started and abandoned does not count.
-- Not done: hero video (on hold), FAQ link inside Settings, a first-run walkthrough overlay.
+- **Home tab** (`components/ProjectHome.tsx`, first on the phone bottom bar: Home, Course, Quiz, Exam, More). New projects open on Home.
+  A project that already has a course still opens on the Course; `?tab=` links still win. Materials moved into the Home grid and "More".
+- **Grid**: four groups (Learn, Practise, Get help, Plan and track), two tiles per row. Groups live in `lib/guide.ts` (`HOME_GROUPS`);
+  a test checks every tile is a real project tab with a title in all languages.
+- **Live line on tiles** (`tileStatus`): materials count, lessons done of total, days to exam (from the Plan), last quiz and exam score.
+  Each query fails on its own and then shows nothing.
+- **Next-step card** on top of Home (add materials, build a course, take a quiz, try an exam), hideable per project (browser only).
+  A step counts as done once a row exists; an abandoned quiz does not count.
+- **After-activity prompts** after a lesson, quiz and exam. **FAQ** at `/faq` (public, five languages).
+- Not verified in a real browser. Not done: hero video (on hold), FAQ link in Settings.
