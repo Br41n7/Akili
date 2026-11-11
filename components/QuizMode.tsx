@@ -6,7 +6,7 @@ import { callAIJSON, errorMessage } from '@/lib/utils';
 import { compactLearnerContext, getLearnerContext, recordEvidence } from '@/lib/adaptive';
 import { summarizeAssessment } from '@/lib/local-learning';
 import QuizSettings from '@/components/QuizSettings';
-import { DEFAULT_QUESTIONS, QUESTION_TYPES, buildQuizPrompt, clampCount, isAnswerCorrect, shapeQuestions, theoryFraction, type QuizQuestionType, type TheoryMarks } from '@/lib/quiz-config';
+import { DEFAULT_QUESTIONS, DEFAULT_TYPES, QUESTION_TYPES, buildQuizPrompt, clampCount, isAnswerCorrect, shapeQuestions, theoryFraction, type QuizQuestionType, type TheoryMarks } from '@/lib/quiz-config';
 import { DOC_COLUMNS, materialContext, materialSources } from '@/lib/material-context';
 import ConceptVisual from '@/components/visual/ConceptVisual';
 import VisualRenderer from '@/components/visual/VisualRenderer';
@@ -16,6 +16,7 @@ import type { VisualSpec } from '@/lib/visual/schema';
 import { ArrowRight, Brain, Check, ImagePlus, RotateCcw, Sparkles, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useT } from '@/components/I18n';
+import ScenarioCard from '@/components/ScenarioCard';
 import AfterActivity from '@/components/AfterActivity';
 
 import {
@@ -34,7 +35,7 @@ export default function QuizMode({ projectId, userId, region, persona, onGoTo }:
   const [phase, setPhase] = useState<Phase>('setup');
   const [topic, setTopic] = useState('');
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
-  const [types, setTypes] = useState<QuizQuestionType[]>(['multiple_choice', 'fill_gap']);
+  const [types, setTypes] = useState<QuizQuestionType[]>(DEFAULT_TYPES);
   const [count, setCount] = useState(DEFAULT_QUESTIONS);
   const [theoryMarks, setTheoryMarks] = useState<TheoryMarks>({});
   const [markingId, setMarkingId] = useState<string | null>(null);
@@ -289,6 +290,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
 
         <div className="space-y-3">
           {q.concept && <Chip tone="biro">{q.concept}</Chip>}
+          {q.type === 'scenario' && typeof q.scenario === 'string' && <ScenarioCard text={q.scenario} />}
           <h2 className="font-read text-[1.25rem] font-semibold leading-snug">{q.question}</h2>
 
           {q.type === 'statements' && Array.isArray(q.statements) && (
@@ -416,6 +418,7 @@ Return JSON: { "summary": string, "evidence": [{ "concept": string, "correct": b
           <h3 className="text-lg font-bold">{t('quiz.review')}</h3>
           {missed.map(q => (
             <Surface key={q.id} className="space-y-2 p-4">
+              {q.type === 'scenario' && typeof q.scenario === 'string' && <ScenarioCard text={q.scenario} compact />}
               <p className="font-read text-base font-semibold leading-snug">{q.question}</p>
               {q.type === 'statements' && Array.isArray(q.statements) && (
                 <ol className="space-y-1 text-sm">{q.statements.map((st: string, i: number) => <li key={i}>{st}</li>)}</ol>

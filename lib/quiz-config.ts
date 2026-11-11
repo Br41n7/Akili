@@ -4,18 +4,21 @@
  * Kept free of React and Supabase so it can be tested directly.
  */
 
-export type QuizQuestionType = 'multiple_choice' | 'fill_gap' | 'statements' | 'theory';
+export type QuizQuestionType = 'multiple_choice' | 'fill_gap' | 'statements' | 'theory' | 'scenario';
 
 export const QUESTION_TYPES: { value: QuizQuestionType; label: string; hint: string }[] = [
   { value: 'multiple_choice', label: 'Multiple choice', hint: 'Four options, one correct' },
   { value: 'fill_gap', label: 'Fill in the gap', hint: 'Type the missing word' },
   { value: 'statements', label: 'Statements (I, II, III, IV)', hint: 'Decide which statements are true' },
   { value: 'theory', label: 'Theory', hint: 'Write your answer, then mark it' },
+  { value: 'scenario', label: 'Scenario (apply it)', hint: 'A real situation: decide what applies' },
 ];
 
 export const MIN_QUESTIONS = 1;
 export const MAX_QUESTIONS = 30;
 export const DEFAULT_QUESTIONS = 5;
+/** What a new quiz starts with. Scenario questions are something the learner switches on, never a default. */
+export const DEFAULT_TYPES: QuizQuestionType[] = ['multiple_choice', 'fill_gap'];
 export const COUNT_PRESETS = [5, 10, 15, 20];
 
 /** Whole number between MIN and MAX. Anything unusable becomes the fallback. */
@@ -35,7 +38,10 @@ export function splitCounts<T extends string>(count: number, types: T[]): Record
   return out;
 }
 
+export const SCENARIO_SPEC = '"scenario": an application question. Put a short, realistic situation in "scenario" (2 to 4 sentences with a person, a setting and a problem, for example a patient, client, student or case the learner could meet in practice). The "question" then asks what the learner should do, or which law, theory, principle or method applies and why. Four options A-D with one best answer; the wrong options must be real principles or actions a student could confuse with the right one, not nonsense. The situation must need the idea to be applied, not just recalled by name. "explanation" names the principle, shows how it fits this situation, and says briefly why each wrong option does not fit. Base the principles on the supplied material when it covers them.';
+
 const TYPE_SPEC: Record<QuizQuestionType | 'diagram', string> = {
+  scenario: SCENARIO_SPEC,
   multiple_choice: '"multiple_choice": four options labelled "A) ", "B) ", "C) ", "D) "; correct_answer is the letter only.',
   fill_gap: '"fill_gap": one complete sentence with a single blank written as □□□; correct_answer is the missing word or short phrase. If more than one answer is acceptable, separate them with " | ". Do not include options.',
   statements: '"statements": a stem, then "statements": an array of 3 or 4 short statements (the app numbers them I, II, III, IV, so do not number them yourself), then four options that combine them, such as "A) I and II only", "B) II and III only", "C) I, III and IV only", "D) I, II, III and IV". Some statements must be false. correct_answer is the letter; the explanation says which statements are true and why.',
@@ -67,7 +73,7 @@ ${types.map(t => `- ${TYPE_SPEC[t]}`).join('\n')}
 Adaptive learner context (evidence, not absolute truth): ${JSON.stringify(i.adaptive)}
 Prioritize weak concepts when the topic is blank. Test understanding, not sentence copying. Every question needs a short explanation.
 Cognitive levels: recall, understanding, application, debugging, transfer.
-Return JSON: { "questions": [{ "id": string, "type": ${types.map(t => `"${t}"`).join(' | ')}, "question": string, "options"?: ["A) ...","B) ...","C) ...","D) ..."], "statements"?: [string], "correct_answer": string, "model_answer"?: string, "marking_points"?: [string], "explanation": string, "concept": string, "cognitive_level": string }] }`;
+Return JSON: { "questions": [{ "id": string, "type": ${types.map(t => `"${t}"`).join(' | ')}, "question": string, "options"?: ["A) ...","B) ...","C) ...","D) ..."], "scenario"?: string, "statements"?: [string], "correct_answer": string, "model_answer"?: string, "marking_points"?: [string], "explanation": string, "concept": string, "cognitive_level": string }] }`;
 }
 
 interface QuestionLike { type?: string; [k: string]: unknown }

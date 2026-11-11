@@ -6,6 +6,7 @@
  * could not render. Rejected output triggers a regeneration in `runAIJSON`.
  */
 import { validateMnemonic } from '@/lib/mnemonics';
+import { validateQa } from '@/lib/flashcards';
 import { z } from 'zod';
 import { stripTags } from '@/lib/text-safe';
 import type { Validation } from '@/lib/ai';
@@ -45,7 +46,7 @@ function answerLetter(answer: unknown, options: string[]): string | null {
 
 export interface NormalizedQuestion {
   id: string;
-  type: 'multiple_choice' | 'true_false' | 'fill_gap' | 'concept_trap' | 'diagram' | 'statements' | 'theory';
+  type: 'multiple_choice' | 'true_false' | 'fill_gap' | 'concept_trap' | 'diagram' | 'statements' | 'theory' | 'scenario';
   question: string;
   options?: string[];
   correct_answer: string;
@@ -103,6 +104,12 @@ function normalizeQuestion(raw: unknown, index: number): NormalizedQuestion | nu
   if (options.length < 2) return null;
   const letter = answerLetter(raw.correct_answer, options);
   if (!letter) return null;
+
+  if (declared === 'scenario' || declared === 'case' || declared === 'application') {
+    const scenario = str(raw.scenario) || str(raw.case) || str(raw.situation);
+    if (scenario.length < 30) return null; // an application question needs its situation
+    return { ...base, type: 'scenario', scenario, options, correct_answer: letter };
+  }
 
   if (declared === 'statements' || declared === 'statement') {
     const statements = normalizeStatements(raw.statements);
@@ -509,6 +516,11 @@ const flashcard = (data: unknown): Validation<Obj> => {
   return ok({ mnemonic: str(data.mnemonic), explanation: str(data.explanation) });
 };
 
+const flashcardQa = (data: unknown): Validation<Obj> => {
+  const r = validateQa(data);
+  return r.ok ? ok({ cards: r.cards } as unknown as Obj) : fail(r.error);
+};
+
 const mnemonicCheck = (data: unknown): Validation<Obj> => {
   const r = validateMnemonic(data);
   return r.ok ? ok(r.data as unknown as Obj) : fail(r.error);
@@ -734,6 +746,7 @@ export const SCHEMAS: Record<string, z.ZodTypeAny> = {
   theory_feedback: z.object({ covered: z.array(z.number().int().min(0)), feedback: z.string().min(5), improvement: zText }).passthrough(),
   mnemonic: z.object({ mnemonic: z.string().min(1), explanation: zText, breakdown: z.array(z.object({ letter: z.string().min(1), item: z.string().min(1) })) }),
   flashcard: z.object({ mnemonic: z.string().min(1), explanation: zText }).passthrough(),
+  flashcard_qa: z.object({ cards: z.array(z.object({ front: z.string().min(1), back: z.string().min(1), quote: z.string().min(1) }).passthrough()).min(1) }).passthrough(),
   figure_explain: z.object({ title: z.string().min(1), summary: z.string().min(10), labels: z.array(z.object({ text: z.string().min(1), meaning: zText })), key_points: zList, questions: z.array(z.object({ question: z.string().min(1), options: z.array(z.string()).length(4), correct_answer: z.string().length(1), explanation: zText })), unclear: z.boolean() }),
   visual_explain: z.object({ summary: z.string().min(10), parts: z.array(z.object({ id: z.string().min(1), text: z.string().min(1) })) }).passthrough(),
   fact: z.object({ type: zText, title: zText, fact: z.string().min(1) }).passthrough(),
@@ -774,6 +787,7 @@ const RAW_VALIDATORS: Record<string, (data: unknown) => Validation<unknown>> = {
   knowledge_graph: normalizeKnowledgeGraph,
   theory_feedback: theoryFeedback,
   flashcard,
+  flashcard_qa: flashcardQa,
   mnemonic: mnemonicCheck,
   visual_question: visualQuestion,
   visual_spec: validateVisualDecision,

@@ -42,7 +42,7 @@ export const cleanGoals = (raw: unknown) => String(raw ?? '').replace(/[\u0000-\
 export const parseDepth = (raw: unknown): Depth => (raw === 'quick' || raw === 'deep' ? raw : 'standard');
 
 // ── Choosing which parts of the materials to show the model ──────────────────
-interface Chunk { source: string; text: string }
+export interface Chunk { source: string; text: string }
 const STOP = new Set('about after again also because been before being between both could does doing during each from have having into more most only other over same some such than that their them then there these they this those through under very were what when where which while will with would your'.split(' '));
 
 export function chunkSources(sources: Source[], size = 900): Chunk[] {
@@ -240,7 +240,8 @@ ${scopeBlock(scope)}
 ${goalsBlock(opts.goals)}
 ${policyBlock(opts.beyondNotes)}${researchBlock}
 
-${reqs}- Maths: write every formula in LaTeX between double dollar signs, like $$E = mc^2$$ (and $$\\ce{2H2 + O2 -> 2H2O}$$ for chemical equations). Put a long formula on its own line. Never use square brackets or \\( \\) for maths. Separate paragraphs with a blank line.
+${reqs}- Tables: when comparing things, use a markdown table: a header row, then a separator row like |---|---|, then one row per line, with the SAME number of cells on every row. At most 4 columns, short cells, no line breaks inside a cell, and never put a | character inside a cell.
+- Maths: write every formula in LaTeX between double dollar signs, like $$E = mc^2$$ (and $$\\ce{2H2 + O2 -> 2H2O}$$ for chemical equations). Put a long formula on its own line. Never use square brackets or \\( \\) for maths. Separate paragraphs with a blank line.
 - Only where the materials support them (otherwise an empty array, never filler): "definitions" (2 to 6 terms), "formulas" ("latex" as bare TeX with no $ delimiters, with each symbol in "variables"), and "exercises" (1 to 3 short open-ended items with "hint", "solution_steps", "answer").
 - Every practice question is answerable from the lesson, with four options "A) ", "B) ", "C) ", "D) " and correct_answer as just the letter.
 JSON rules: every backslash inside a string must be doubled (write "\\\\frac", not "\\frac"), and a line break inside a string is the JSON escape \\n (one backslash then n, which becomes a real line break when parsed; never write \\\\n, which would show as the letters backslash-n).

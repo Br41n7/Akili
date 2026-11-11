@@ -38,8 +38,13 @@
 .prose-akili code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; background: #E9ECFB; padding: 0.1em 0.35em; border-radius: 4px; }
 .prose-akili pre { background: #16204A; color: #F4F5F7; padding: 1em; border-radius: 12px; overflow-x: auto; font-size: 0.9rem; line-height: 1.6; }
 .prose-akili pre code { background: transparent; padding: 0; color: inherit; }
-.prose-akili table { display: block; width: 100%; overflow-x: auto; border-collapse: collapse; font-family: var(--font-ui), system-ui, sans-serif; font-size: 0.95rem; }
-.prose-akili th, .prose-akili td { border: 1px solid #DCE0E9; padding: 0.5em 0.75em; text-align: left; }
-.prose-akili th { background: #F4F5F7; font-weight: 600; }
+.prose-akili .table-wrap { margin: 1em 0; overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid #DCE0E9; border-radius: 12px; background: #fff; }
+.prose-akili .table-wrap:focus-visible { outline: 2px solid #2F45D0; outline-offset: 2px; }
+.prose-akili table { width: max-content; min-width: 100%; border-collapse: collapse; font-family: var(--font-ui), system-ui, sans-serif; font-size: 0.93rem; line-height: 1.45; }
+.prose-akili th, .prose-akili td { border-bottom: 1px solid #DCE0E9; border-right: 1px solid #DCE0E9; padding: 0.55em 0.8em; text-align: left; vertical-align: top; min-width: 6.5rem; max-width: 22rem; overflow-wrap: anywhere; }
+.prose-akili th:last-child, .prose-akili td:last-child { border-right: 0; }
+.prose-akili tbody tr:last-child td { border-bottom: 0; }
+.prose-akili th { background: #F4F5F7; font-weight: 700; white-space: nowrap; }
+.prose-akili tbody tr:nth-child(even) td { background: #FAFBFC; }
 .prose-akili hr { border: 0; border-top: 1px solid #DCE0E9; }
 .prose-akili img { max-width: 100%; height: auto; border-radius: 8px; }

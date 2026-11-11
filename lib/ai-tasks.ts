@@ -54,6 +54,7 @@ const list: TaskSpec[] = [
   { id: 'slide_deck', providers: GROQ_FIRST, input: 'text', validation: 'slide_deck', timeoutMs: HEAVY_MS, retries: 1, heavy: true },
 
   // Routine text transformations: DeepSeek first when configured.
+  { id: 'flashcard_qa', providers: GROQ_FIRST, input: 'text', validation: 'flashcard_qa', timeoutMs: BASE_MS, retries: 1, lowEffort: true },
   { id: 'mnemonic', providers: DEEPSEEK_FIRST, input: 'text', validation: 'mnemonic', timeoutMs: LIGHT_MS, retries: 1, lowEffort: true },
   { id: 'shortcut', providers: DEEPSEEK_FIRST, input: 'text', validation: 'shortcut', timeoutMs: LIGHT_MS, retries: 1, lowEffort: true },
   { id: 'study_plan', providers: DEEPSEEK_FIRST, input: 'text', timeoutMs: LIGHT_MS, retries: 1, lowEffort: true },

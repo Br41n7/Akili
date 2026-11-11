@@ -2,8 +2,10 @@
 import { useEffect, useRef, useState, type ComponentPropsWithRef, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
+import remarkGfm from 'remark-gfm';
 import rehypeKatex from 'rehype-katex';
 import 'katex/contrib/mhchem';
+import { normaliseTables } from '@/lib/table-text';
 import { normaliseMath } from '@/lib/math-text';
 import 'katex/dist/katex.min.css';
 import { AlertTriangle, Check, Loader2, X } from 'lucide-react';
@@ -425,10 +427,15 @@ export function ConfirmDialog({ open, title, body, confirmLabel, cancelLabel = '
 // Reading text
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Tables sit in their own scrolling box, so a wide table scrolls sideways instead of squeezing every column or widening the page. */
+const PROSE_COMPONENTS = {
+  table: ({ node: _node, ...props }: any) => <div className="table-wrap" tabIndex={0}><table {...props} /></div>,
+};
+
 export function Prose({ children, className }: { children: string; className?: string }) {
   return (
     <div className={cn('prose-akili', className)}>
-      <ReactMarkdown remarkPlugins={[[remarkMath, { singleDollarTextMath: false }]]} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: 'ignore', trust: false }]]}>{normaliseMath(children)}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[[remarkGfm, { singleTilde: false }], [remarkMath, { singleDollarTextMath: false }]]} components={PROSE_COMPONENTS} rehypePlugins={[[rehypeKatex, { throwOnError: false, strict: 'ignore', trust: false }]]}>{normaliseTables(normaliseMath(children))}</ReactMarkdown>
     </div>
   );
 }

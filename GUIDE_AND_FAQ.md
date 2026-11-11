@@ -10,3 +10,7 @@
   A step counts as done once a row exists; an abandoned quiz does not count.
 - **After-activity prompts** after a lesson, quiz and exam. **FAQ** at `/faq` (public, five languages).
 - Not verified in a real browser. Not done: hero video (on hold), FAQ link in Settings.
+
+## Crash screen (phase 4s)
+- `app/error.tsx` and `app/global-error.tsx` replace the bare "Application error" page. A script that failed to download (weak network, or a new deploy while the page was open) triggers one automatic reload (never twice within a minute). Other crashes show a plain message, Reload / Try again buttons and the real error text to screenshot.
+- Checked in headless Chromium with a deliberately crashing page. Could NOT reproduce the reported crash on /auth/... (all auth routes and five languages load cleanly in the production build), so its cause is unconfirmed.

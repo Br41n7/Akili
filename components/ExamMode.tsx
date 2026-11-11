@@ -1,5 +1,6 @@
 'use client';
 import { useT } from '@/components/I18n';
+import ScenarioCard from '@/components/ScenarioCard';
 import AfterActivity from '@/components/AfterActivity';
 
 import { useEffect, useRef, useState } from 'react';
@@ -189,6 +190,7 @@ Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_conc
               <h3 className="text-lg font-bold">{t('quiz.review')}</h3>
               {missed.slice(0, 6).map((eq: any) => (
                 <Surface key={eq.id} className="space-y-2 p-4">
+                  {eq.type === 'scenario' && typeof eq.scenario === 'string' && <ScenarioCard text={eq.scenario} compact />}
                   <p className="font-read text-base font-semibold leading-snug">{eq.question}</p>
                   <p className="text-sm"><span className="font-semibold text-tick">{t('quiz.answer')}</span>{optionsOf(eq).find((o: string) => o.startsWith(`${eq.correct_answer})`)) || eq.correct_answer}</p>
                   {eq.explanation && <p className="text-sm leading-relaxed text-muted">{eq.explanation}</p>}
@@ -230,6 +232,7 @@ Return JSON: {"overall_verdict": string, "weak_concepts": [string], "strong_conc
         </button>
       </div>
 
+      {q.type === 'scenario' && typeof q.scenario === 'string' && <ScenarioCard text={q.scenario} />}
       <p className="font-read text-[1.25rem] font-semibold leading-snug">{q.question}</p>
 
       <div role="radiogroup" aria-label="Answer options" className="space-y-2">

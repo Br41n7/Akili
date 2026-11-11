@@ -31,14 +31,14 @@ const GUIDE: Record<MnemonicStyle, string> = {
   'african-themed': "Use familiar images from the learner's own region and everyday life (markets, food, music, sport, transport, sayings) as the memory hooks, using the region you were told about. If the region is unknown, use widely familiar everyday images. Keep it respectful and never stereotype.",
 };
 
-export function buildMnemonicPrompt(i: { concept: string; style: MnemonicStyle; items?: string[] }): string {
+export function buildMnemonicPrompt(i: { concept: string; style: MnemonicStyle; items?: string[]; notes?: string }): string {
   const items = (i.items || []).slice(0, MAX_ITEMS);
   const acro = i.style === 'acronym';
   return `Create a ${i.style} mnemonic to remember: "${i.concept}".
 ${items.length ? `The items to remember, in this order:\n${items.map((t, n) => `${n + 1}. ${t}`).join('\n')}\nUse ALL of them, in this order, and add nothing else.` : 'Choose the 3 to 6 most important parts of this concept to remember. Use only accurate, standard content; if you are unsure of a fact, leave it out.'}
 
 Style: ${GUIDE[i.style]}
-
+${i.notes ? `\nThe learner's notes (base every fact on these):\n${i.notes}\nIf the notes do not cover this concept, still help from well-established general knowledge, but begin "explanation" with "Beyond your notes:" so the learner knows to check it.\n` : ''}
 Rules:
 - The mnemonic must be short enough to say in one breath or two.
 - "explanation" says what each part of the mnemonic stands for, in order, and states the facts correctly.
