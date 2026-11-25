@@ -49,5 +49,8 @@ Rules:
 Return JSON only: {"title": string, "summary": string, "unclear": boolean, "labels": [{"text": string, "meaning": string}], "key_points": [string], "questions": [{"question": string, "options": [string, string, string, string], "correct_answer": "A"|"B"|"C"|"D", "explanation": string}]}`;
 }
 
-/** Figures from uploads are switched off for now (set AKILI_FIGURES=true on the server and NEXT_PUBLIC_AKILI_FIGURES=true for the tab to bring them back). */
-export const figuresEnabled = (env: Record<string, string | undefined> = process.env) => env.AKILI_FIGURES === 'true';
+/**
+ * Pictures from the learner's own files power the "figures inside lessons" feature, so the routes are ON by default.
+ * Set AKILI_FIGURES=false on the server to switch them all off. (The separate Figures tab is hidden unless NEXT_PUBLIC_AKILI_FIGURES=true.)
+ */
+export const figuresEnabled = (env: Record<string, string | undefined> = process.env) => env.AKILI_FIGURES !== 'false';

@@ -1,4 +1,5 @@
 'use client';
+import LessonBody from '@/components/LessonFigures';
 import { continueLabel, endsModule } from '@/lib/course-nav';
 import { useT } from '@/components/I18n';
 import AfterActivity from '@/components/AfterActivity';
@@ -352,7 +353,7 @@ export default function CourseView({ projectId, userId, region, persona, userGro
         {active.origin === 'beyond_notes' && <p className="rounded-xl bg-marker-wash p-3 text-sm font-semibold">Beyond your notes: this lesson adds standard material your notes do not cover. Check it against your textbook or teacher.</p>}
         {active.origin === 'web' && <p className="rounded-xl bg-marker-wash p-3 text-sm font-semibold">From the web: sources are listed at the end of this lesson.</p>}
 
-        <Prose>{active.content}</Prose>
+        <LessonBody content={active.content} projectId={projectId} />
 
         {Array.isArray(active.sources) && active.sources.length > 0 && (
           <Surface className="p-4">

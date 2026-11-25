@@ -6,7 +6,8 @@ import { callAI, callAIJSON, cn, errorMessage } from '@/lib/utils';
 import { DOC_COLUMNS, materialContext, materialSources } from '@/lib/material-context';
 import ConceptVisual from '@/components/visual/ConceptVisual';
 import { compactLearnerContext, getLearnerContext, recordEvidence } from '@/lib/adaptive';
-import { Brain, MessageSquare, Send } from 'lucide-react';
+import { Brain, MessageSquare, Send, Trash2 } from 'lucide-react';
+import { clearChat, loadChat, saveChatMessage } from '@/lib/chat-history';
 import { Button, IconButton, OptionRow, Prose, Surface, TextArea, splitOption, type OptionState } from '@/components/ui';
 
 interface Props { projectId: string; userId: string; region: string; persona: string; onGoToMaterials?: () => void }
@@ -30,6 +31,19 @@ export default function AskAI({ projectId, userId, region, persona, onGoToMateri
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, practice]);
 
+  // Bring back the saved conversation after a refresh. Anything typed while it loads stays after the old messages.
+  useEffect(() => {
+    let alive = true;
+    loadChat(supabase, projectId, userId).then(old => { if (alive && old.length) setMessages(cur => [...old, ...cur]); });
+    return () => { alive = false; };
+  }, [projectId, userId]);
+
+  const clear = async () => {
+    if (!window.confirm(t('ask.clearConfirm'))) return;
+    setMessages([]); setPracticeFor(null); setPractice([]);
+    await clearChat(supabase, projectId, userId);
+  };
+
   useEffect(() => {
     supabase.from('documents').select('id', { count: 'exact', head: true }).eq('project_id', projectId).eq('user_id', userId)
       .then(({ count }) => setNoMaterials(!count));
@@ -40,6 +54,7 @@ export default function AskAI({ projectId, userId, region, persona, onGoToMateri
     if (!text || loading) return;
     const history = [...messages, { role: 'user' as const, text }];
     setMessages(history);
+    void saveChatMessage(supabase, projectId, userId, { role: 'user', text });
     setInput('');
     setLoading(true);
 
@@ -56,7 +71,7 @@ export default function AskAI({ projectId, userId, region, persona, onGoToMateri
         ...(notes || []).map(n => `[STUDENT NOTE: ${n.title || 'Untitled note'}]\n${n.content}`),
       ].filter(Boolean).join('\n\n').slice(0, 10500);
       const adaptive = compactLearnerContext(learner);
-      const historyText = messages.slice(-6).map(m => `${m.role === 'user' ? 'Student' : 'Tutor'}: ${m.text}`).join('\n');
+      const historyText = messages.slice(-6).map(m => `${m.role === 'user' ? 'Student' : 'Tutor'}: ${m.text.slice(0, 1200)}`).join('\n');
 
       const prompt = `You are Akili, an adaptive AI tutor. Answer the student's question using the project materials and the learner context below.
 
@@ -79,6 +94,7 @@ STRICT SCOPE AND LEVEL RULES:
 
       const result = await callAI({ task: 'adaptive_tutor', prompt, region, persona, projectId });
       setMessages(p => [...p, { role: 'ai', text: result }]);
+      void saveChatMessage(supabase, projectId, userId, { role: 'ai', text: result });
     } catch (err) {
       setMessages(p => [...p, { role: 'ai', text: errorMessage(err, t('ask.error')), failed: true }]);
     } finally {
@@ -160,6 +176,11 @@ Return JSON: { "questions": [{ "id": string, "question": string, "options": ["A)
   return (
     <div className="flex min-h-[calc(100dvh-116px)] flex-col md:min-h-[calc(100dvh-180px)]">
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
+        {messages.length > 0 && (
+          <div className="flex justify-end">
+            <button onClick={clear} className="inline-flex min-h-8 items-center gap-1 text-xs font-semibold text-muted hover:text-redpen"><Trash2 size={13} /> {t('ask.clear')}</button>
+          </div>
+        )}
         {messages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 py-14 text-center">
             <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-biro-wash text-biro-dark"><MessageSquare size={22} /></span>

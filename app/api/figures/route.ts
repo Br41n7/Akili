@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 import { supabaseAdmin } from '@/lib/supabase/admin';
 import { loadUserPlan } from '@/lib/plans-db';
-import { figuresEnabled, FIGURE_BUCKET, MAX_FIGURE_BYTES, SIGNED_URL_SECONDS, cleanCaption, sniffImageType, storagePath, uploadFields } from '@/lib/figures';
+import { figuresEnabled, FIGURE_BUCKET, ownsPath, MAX_FIGURE_BYTES, SIGNED_URL_SECONDS, cleanCaption, sniffImageType, storagePath, uploadFields } from '@/lib/figures';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -77,4 +77,21 @@ export async function POST(req: NextRequest) {
     return fail(error.code === '42P01' ? 'Figures are not set up yet. Ask the site owner to run the latest database update.' : 'The picture could not be saved. Please try again.', 500);
   }
   return NextResponse.json({ id }, { status: 201 });
+}
+
+/** Remove every picture that came from one uploaded file (used when the learner deletes that file from Materials). */
+export async function DELETE(req: NextRequest) {
+  if (!figuresEnabled()) return NextResponse.json({ error: 'Figures are switched off for now.' }, { status: 404 });
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return fail('Please sign in again.', 401);
+  const sp = new URL(req.url).searchParams;
+  const projectId = sp.get('project_id') || ''; const source = (sp.get('source') || '').trim();
+  if (!/^[0-9a-f-]{36}$/i.test(projectId) || !source) return fail('Say which file.', 400);
+  const { data: rows } = await supabaseAdmin.from('figures').select('id, storage_path').eq('user_id', user.id).eq('project_id', projectId).eq('source_name', source.slice(0, 120));
+  const list = (rows || []) as any[];
+  const paths = list.map(r => r.storage_path).filter((x: string) => ownsPath(x, user.id));
+  if (paths.length) await supabaseAdmin.storage.from(FIGURE_BUCKET).remove(paths);
+  if (list.length) await supabaseAdmin.from('figures').delete().eq('user_id', user.id).eq('project_id', projectId).eq('source_name', source.slice(0, 120));
+  return NextResponse.json({ removed: list.length });
 }

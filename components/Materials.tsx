@@ -7,6 +7,8 @@ import { useT } from '@/components/I18n';
 import { errorMessage } from '@/lib/utils';
 import { ACCEPTED_TYPES, uploadDocument } from '@/lib/upload-document';
 import UploadHelp from '@/components/UploadHelp';
+import { extractPictures, removePictures } from '@/lib/figure-auto';
+import { forgetLessonFigures } from '@/components/LessonFigures';
 import { usePlan } from '@/lib/use-plan';
 import { useFileDrop } from '@/components/use-file-drop';
 import { Button, ConfirmDialog, EmptyState, ErrorState, ListSkeleton, Segmented, Surface, TextArea, TextInput, IconButton } from '@/components/ui';
@@ -60,6 +62,8 @@ export default function Materials({ projectId, userId }: Props) {
         const doc = await uploadDocument(file, projectId, userId, { signal: abortRef.current.signal, language: typeof document !== 'undefined' ? document.documentElement.lang || 'en' : 'en', onStatus: setScanStatus, onNote: note => toast(note, { duration: 9000 }) });
         setDocs(p => [doc, ...p]);
         added++;
+        // Pictures inside the file are found in the background so lessons can show them. The upload is already done.
+        void extractPictures(file, projectId).then(n => { if (n > 0) { forgetLessonFigures(projectId); toast.success(`Saved ${n} picture${n === 1 ? '' : 's'} from ${file.name} to show in your lessons.`); } });
       } catch (err) {
         toast.error(errorMessage(err, `${file.name} could not be uploaded.`));
       }
@@ -106,7 +110,7 @@ export default function Materials({ projectId, userId }: Props) {
     const table = deleteTarget.kind === 'doc' ? 'documents' : 'notes';
     const { error } = await supabase.from(table).delete().eq('id', deleteTarget.id);
     if (error) { toast.error('Could not delete that. Try again.'); return; }
-    if (deleteTarget.kind === 'doc') setDocs(p => p.filter(d => d.id !== deleteTarget.id));
+    if (deleteTarget.kind === 'doc') { setDocs(p => p.filter(d => d.id !== deleteTarget.id)); void removePictures(deleteTarget.label, projectId).then(() => forgetLessonFigures(projectId)); }
     else setNotes(p => p.filter(n => n.id !== deleteTarget.id));
     setDeleteTarget(null);
   };
